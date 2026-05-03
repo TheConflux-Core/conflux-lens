@@ -1,0 +1,10 @@
+src/
+tsconfig.json
+tsup.config.ts
+node_modules/
+dist-temp/
+examples/*.js
+examples/test-basic.js
+*.map
+*.backup
+*.py

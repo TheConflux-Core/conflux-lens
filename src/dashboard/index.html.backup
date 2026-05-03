@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Agent Proxy</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M12 1v6m0 6v10"></path>
+          <path d="M1 12h6m6 0h10"></path>
+          <path d="M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24"></path>
+        </svg>
+        <span>AI Agent Proxy</span>
+      </div>
+      <div class="status-bar">
+        <div class="status-indicator" id="connectionStatus">
+          <span class="dot"></span>
+          <span class="label">Disconnected</span>
+        </div>
+        <div class="stats">
+          <span id="exchangeCount">0 requests</span>
+          <span id="avgTime"></span>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="btn btn-secondary" id="clearBtn" title="Clear all requests">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3,6 5,6 21,6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+          Clear
+        </button>
+        <label class="btn btn-primary" id="exportBtn" title="Export to file">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7,10 12,15 17,10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Export
+        </label>
+      </div>
+    </header>
+
+    <div class="search-bar">
+      <input type="text" id="searchInput" placeholder="Filter by method, URL, model, token count..." autocomplete="off">
+      <div class="filter-tags" id="filterTags"></div>
+      <div class="quick-filters">
+        <button class="filter-btn" data-filter="all" active>All</button>
+        <button class="filter-btn" data-filter="error">Errors</button>
+        <button class="filter-btn" data-filter="llm">LLM APIs</button>
+        <button class="filter-btn" data-filter="slow">Slow (>2s)</button>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <strong>Requests</strong>
+          <span class="count" id="requestCount">0</span>
+        </div>
+        <div class="request-list" id="requestList">
+          <div class="empty-state">
+            <p>⏳ Waiting for requests...</p>
+            <small>Configure your AI agent to use proxy localhost:9876</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-pane" id="detailPane">
+        <div class="empty-detail">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          <h3>Select a request to inspect</h3>
+          <p>Click on any request from the list to see full details</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
