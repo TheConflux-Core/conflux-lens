@@ -201,36 +201,146 @@ export class ProxyServer {
     this.exchanges.set(exchangeId, exchange);
     this.broadcastExchange(exchange);
 
+    // CRITICAL: This is where MITM HTTPS interception happens.
+    // After 200 Connection Established, the client will start a TLS handshake
+    // with the proxy (thinking it's the real server).
+    // We need to:
+    // 1. Generate a cert for the target hostname
+    // 2. Terminate the client's TLS using that cert (decrypt)
+    // 3. Connect to the real upstream server via TLS
+    // 4. Pipe decrypted data between client and upstream
+
     socket.write('HTTP/1.1 200 Connection Established\r\n');
     socket.write('Proxy-Agent: Conflux Lens\r\n');
     socket.write('\r\n');
 
-    const mitmServer = net.createServer((clientSocket) => {
-      const upstream = tls.connect({
+    // Generate certificate for this hostname (signed by our CA)
+    const { cert, key } = generateCertForHost(hostname);
+
+    // Create TLS server to handle client's TLS handshake with our generated cert
+    // This is the MITM part - we pretend to be the target server
+    const tlsServer = tls.createServer({
+      key,
+      cert,
+      requestCert: false,
+      rejectUnauthorized: false,
+    }, (clientTlsSocket: tls.TLSSocket) => {
+      // Client TLS handshake complete - we now have decrypted data from client
+      
+      // Connect to the real upstream server
+      const upstreamTls = tls.connect({
         host: hostname,
         port,
         rejectUnauthorized: false,
       }, () => {
-        clientSocket.pipe(upstream);
-        upstream.pipe(clientSocket);
+        // Upstream TLS connected - now we can pipe decrypted data
+        
+        // Pipe client -> upstream (decrypted by clientTlsSocket, re-encrypted by upstreamTls)
+        clientTlsSocket.pipe(upstreamTls);
+        
+        // Pipe upstream -> client (decrypted by upstreamTls, re-encrypted by clientTlsSocket)
+        upstreamTls.pipe(clientTlsSocket);
+        
+        // Log request data for capture/exchange
+        clientTlsSocket.on('data', (chunk: Buffer) => {
+          try {
+            const data = chunk.toString('utf8');
+            // Check if this looks like HTTP request
+            if (data.startsWith('GET ') || data.startsWith('POST ') || data.startsWith('PUT ') || 
+                data.startsWith('DELETE ') || data.startsWith('PATCH ') || data.startsWith('HEAD ')) {
+              // Update exchange with request data
+              const capturedRequest: CapturedRequest = {
+                ...exchange.request,
+                body: data.length > 50000 ? data.substring(0, 50000) + '... [truncated]' : data,
+                bodySize: data.length,
+              };
+              exchange.request = capturedRequest;
+              this.updateExchange(exchangeId, { request: capturedRequest });
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        });
+        
+        // Log response data
+        upstreamTls.on('data', (chunk: Buffer) => {
+          try {
+            const data = chunk.toString('utf8');
+            if (data.startsWith('HTTP/')) {
+              const firstLine = data.split('\r\n')[0];
+              const match = firstLine.match(/HTTP\/\d\.\d (\d+) (.*)/);
+              if (match) {
+                const statusCode = parseInt(match[1], 10);
+                const response: CapturedResponse = {
+                  statusCode,
+                  statusMessage: match[2],
+                  headers: {},
+                  duration: Date.now() - exchange.request.timestamp,
+                  timestamp: Date.now(),
+                  body: data.length > 50000 ? data.substring(0, 50000) + '... [truncated]' : data,
+                  bodySize: data.length,
+                };
+                this.updateExchange(exchangeId, { response });
+              }
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        });
+        
+        this.log('info', `HTTPS MITM established: ${hostname}:${port}`);
       });
-
-      upstream.on('error', () => clientSocket.end());
-      clientSocket.on('error', () => upstream.end());
-    });
-
-    mitmServer.listen(0, '127.0.0.1', () => {
-      const mitmPort = (mitmServer.address() as net.AddressInfo).port;
-      const mitmClient = net.connect(mitmPort, '127.0.0.1', () => {
-        socket.pipe(mitmClient);
-        mitmClient.pipe(socket);
+      
+      upstreamTls.on('error', (err: Error) => {
+        this.log('verbose', `Upstream TLS error: ${err.message}`);
+        clientTlsSocket.end();
+      });
+      
+      clientTlsSocket.on('error', (err: Error) => {
+        this.log('verbose', `Client TLS error: ${err.message}`);
+        upstreamTls.end();
       });
     });
-
-    this.tlsServers.set(hostname, mitmServer);
-
+    
+    // Handle the TLS server errors
+    tlsServer.on('error', (err: Error) => {
+      this.log('verbose', `TLS server error: ${err.message}`);
+      socket.end();
+    });
+    
+    // Now we need to feed the client socket's data into the TLS server
+    // The client will start sending TLS ClientHello after receiving 200
+    // We pipe the raw socket data to the TLS server
+    
+    // Create a connection to the TLS server via a pipe
+    // The TLS server is listening on localhost, we connect to it and pipe the client socket
+    
+    tlsServer.listen(0, '127.0.0.1', () => {
+      const mitmPort = (tlsServer.address() as net.AddressInfo).port;
+      
+      // Connect to our TLS server and pipe the client socket to it
+      const pipeSocket = net.connect(mitmPort, '127.0.0.1', () => {
+        // Once connected to our TLS server, pipe the client socket to this connection
+        socket.pipe(pipeSocket);
+        pipeSocket.pipe(socket);
+        
+        // If there was initial head data, write it
+        if (head && head.length > 0) {
+          pipeSocket.write(head);
+        }
+      });
+      
+      pipeSocket.on('error', () => {
+        socket.end();
+      });
+      
+      this.log('debug', `MITM proxying ${hostname}:${port} via localhost:${mitmPort}`);
+    });
+    
+    this.tlsServers.set(hostname, tlsServer);
+    
     socket.on('error', () => {
-      mitmServer.close();
+      tlsServer.close();
       this.tlsServers.delete(hostname);
     });
   }

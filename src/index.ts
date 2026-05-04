@@ -6,7 +6,6 @@ import * as path from 'path';
 import * as tls from 'tls';
 import * as forge from 'node-forge';
 import { URL } from 'url';
-import { handleHttpsConnect, cleanupAllServers } from './proxy/https-intercept';
 import { loadOrCreateRootCA, getCAFingerprint, CA_CERT_PATH } from './cert-manager';
 import { TrustStore, checkTrust } from './utils/trust-store';
 
@@ -337,14 +336,12 @@ console.log('=== Ready ===\n');
 // Cleanup on shutdown
 process.on('SIGINT', () => {
   console.log('\n\nShutting down...');
-  cleanupAllServers();
   proxyServer.stop().then(() => {
     process.exit(0);
   });
 });
 
 process.on('SIGTERM', () => {
-  cleanupAllServers();
   proxyServer.stop();
 });
 
