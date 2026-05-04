@@ -1,5 +1,6 @@
 import * as fs from 'fs';
-import { CA_CERT_PATH } from '../cert-manager';
+import * as os from 'os';
+import { CA_CERT_PATH as UNIX_CA_PATH } from '../cert-manager';
 
 /**
  * Trust store helper - configures Node.js to trust the custom CA certificate.
@@ -14,10 +15,12 @@ export class TrustStore {
       return false;
     }
 
+    const caPath = this.getCACertPath();
+    
     try {
       // Check if the specified file exists and matches our CA cert
       const content = fs.readFileSync(extraCerts, 'utf8');
-      const ours = fs.readFileSync(CA_CERT_PATH, 'utf8');
+      const ours = fs.readFileSync(caPath, 'utf8');
       return content === ours;
     } catch (err) {
       return false;
@@ -25,29 +28,43 @@ export class TrustStore {
   }
 
   /**
+   * Get the platform-appropriate CA cert path.
+   */
+  static getCACertPath(): string {
+    if (process.platform === 'win32') {
+      // Windows: use USERPROFILE environment variable
+      const userProfile = process.env.USERPROFILE || 'C:\\Users\\Default';
+      return `${userProfile}\\.conflux-lens\\ca.pem`;
+    }
+    return UNIX_CA_PATH;
+  }
+
+  /**
    * Get the setup command for manual configuration.
    */
   static getSetupCommand(): string {
+    const caPath = this.getCACertPath();
     if (process.platform === 'win32') {
-      return `$env:NODE_EXTRA_CA_CERTS="${CA_CERT_PATH}"`;
+      return `$env:NODE_EXTRA_CA_CERTS="${caPath}"`;
     }
-    return `export NODE_EXTRA_CA_CERTS="${CA_CERT_PATH}"`;
+    return `export NODE_EXTRA_CA_CERTS="${caPath}"`;
   }
 
   /**
    * Get the setup command for persistent configuration (in shell RC files).
    */
   static getPersistentSetupCommand(): string {
+    const caPath = this.getCACertPath();
     if (process.platform === 'win32') {
-      return `[System.Environment]::SetEnvironmentVariable('NODE_EXTRA_CA_CERTS', '${CA_CERT_PATH}', 'User')`;
+      return `[System.Environment]::SetEnvironmentVariable('NODE_EXTRA_CA_CERTS', '${caPath}', 'User')`;
     }
     const shell = process.env.SHELL || '';
     if (shell.includes('zsh')) {
-      return `echo 'export NODE_EXTRA_CA_CERTS="${CA_CERT_PATH}"' >> ~/.zshrc`;
+      return `echo 'export NODE_EXTRA_CA_CERTS="${caPath}"' >> ~/.zshrc`;
     } else if (shell.includes('bash')) {
-      return `echo 'export NODE_EXTRA_CA_CERTS="${CA_CERT_PATH}"' >> ~/.bashrc`;
+      return `echo 'export NODE_EXTRA_CA_CERTS="${caPath}"' >> ~/.bashrc`;
     } else {
-      return `echo 'export NODE_EXTRA_CA_CERTS="${CA_CERT_PATH}"' >> ~/.profile`;
+      return `echo 'export NODE_EXTRA_CA_CERTS="${caPath}"' >> ~/.profile`;
     }
   }
 
@@ -55,6 +72,7 @@ export class TrustStore {
    * Print setup instructions to the console.
    */
   static printSetupInstructions(): void {
+    const caPath = this.getCACertPath();
     console.log('\n\ud83d\udd10 HTTPS Interception Setup');
     console.log('='.repeat(50));
     console.log('\nTo enable HTTPS interception for Node.js applications,');
@@ -79,11 +97,12 @@ export class TrustStore {
       return true;
     }
 
-    if (!fs.existsSync(CA_CERT_PATH)) {
+    const caPath = this.getCACertPath();
+    if (!fs.existsSync(caPath)) {
       return false;
     }
 
-    process.env.NODE_EXTRA_CA_CERTS = CA_CERT_PATH;
+    process.env.NODE_EXTRA_CA_CERTS = caPath;
     return true;
   }
 
@@ -91,6 +110,7 @@ export class TrustStore {
    * Check if Node.js built-in TLS would trust our CA.
    */
   static checkTrust(): { configured: boolean; message: string } {
+    const caPath = this.getCACertPath();
     const extraCerts = process.env.NODE_EXTRA_CA_CERTS;
 
     if (!extraCerts) {
@@ -107,9 +127,16 @@ export class TrustStore {
       };
     }
 
+    if (!fs.existsSync(caPath)) {
+      return {
+        configured: false,
+        message: `Our CA certificate not found: ${caPath}`
+      };
+    }
+
     try {
       const content = fs.readFileSync(extraCerts, 'utf8');
-      const ours = fs.readFileSync(CA_CERT_PATH, 'utf8');
+      const ours = fs.readFileSync(caPath, 'utf8');
       if (content === ours) {
         return {
           configured: true,

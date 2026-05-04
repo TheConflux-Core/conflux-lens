@@ -3,7 +3,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadOrCreateRootCA, CA_CERT_PATH, getCAFingerprint } from '../cert-manager';
+import { loadOrCreateRootCA, CA_CERT_PATH as UNIX_CA_PATH, getCAFingerprint } from '../cert-manager';
 import { TrustStore } from '../utils/trust-store';
 
 const args = process.argv.slice(2);
@@ -48,6 +48,10 @@ function main(): void {
       // Print fingerprint
       console.log(`   CA Fingerprint: ${getCAFingerprint()}\n`);
       
+      // Print platform-specific path
+      const caPath = TrustStore.getCACertPath();
+      console.log(`   CA Path: ${caPath}\n`);
+      
       // Print instructions
       console.log('\n📝 Next Steps:');
       console.log('\n1. Configure Node.js to trust this CA:');
@@ -64,11 +68,13 @@ function main(): void {
       console.log('\n🔍 Verifying HTTPS Interception Configuration\n');
       console.log('='.repeat(50));
       
+      const caPath = TrustStore.getCACertPath();
+      
       // Check CA cert exists
-      const caExists = fs.existsSync(CA_CERT_PATH);
+      const caExists = fs.existsSync(caPath);
       console.log(`\nCA Certificate: ${caExists ? '✅ Found' : '❌ Not found'}`);
       if (caExists) {
-        console.log(`   Path: ${CA_CERT_PATH}`);
+        console.log(`   Path: ${caPath}`);
         console.log(`   Fingerprint: ${getCAFingerprint()}`);
       }
       
@@ -89,17 +95,19 @@ function main(): void {
     case 'auto-configure': {
       console.log('\n⚙️  Auto-configuring NODE_EXTRA_CA_CERTS...\n');
       
-      if (!fs.existsSync(CA_CERT_PATH)) {
-        console.log('❌ CA certificate not found. Run `npm run setup-trust setup` first.\n');
+      const caPath = TrustStore.getCACertPath();
+      
+      if (!fs.existsSync(caPath)) {
+        console.log(`❌ CA certificate not found. Run \`npm run setup-trust setup\` first.\n`);
         process.exit(1);
       }
       
-      process.env.NODE_EXTRA_CA_CERTS = CA_CERT_PATH;
+      process.env.NODE_EXTRA_CA_CERTS = caPath;
       const trustInfo = TrustStore.checkTrust();
       
       if (trustInfo.configured) {
         console.log('✅ NODE_EXTRA_CA_CERTS configured for this session.');
-        console.log(`   Value: ${CA_CERT_PATH}\n`);
+        console.log(`   Value: ${caPath}\n`);
         console.log('   Note: This only affects the current process.');
         console.log('   Run `npm run setup-trust verify` to verify.\n');
       } else {
@@ -111,12 +119,15 @@ function main(): void {
     }
 
     case 'fingerprint': {
-      if (!fs.existsSync(CA_CERT_PATH)) {
-        console.log('❌ CA certificate not found. Run `npm run setup-trust setup` first.\n');
+      const caPath = TrustStore.getCACertPath();
+      
+      if (!fs.existsSync(caPath)) {
+        console.log(`❌ CA certificate not found. Run \`npm run setup-trust setup\` first.\n`);
         process.exit(1);
       }
       console.log(`\nCA Certificate Fingerprint (SHA256):\n`);
       console.log(`  ${getCAFingerprint()}\n`);
+      console.log(`  Path: ${caPath}\n`);
       break;
     }
 

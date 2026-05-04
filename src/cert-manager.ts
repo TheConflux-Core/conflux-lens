@@ -4,10 +4,17 @@ import * as os from 'os';
 import * as path from 'path';
 
 const HOME_DIR = os.homedir();
-export const CA_DIR = path.join(HOME_DIR, '.conflux-lens');
-export const CA_CERT_PATH = path.join(CA_DIR, 'ca.pem');
-export const CA_KEY_PATH = path.join(CA_DIR, 'ca-key.pem');
-export const CERT_CACHE_DIR = path.join(CA_DIR, 'certs');
+const IS_WINDOWS = process.platform === 'win32';
+
+// Use platform-appropriate path
+const CA_BASE_DIR = IS_WINDOWS 
+  ? path.join(process.env.USERPROFILE || 'C:\\Users\\Default', '.conflux-lens')
+  : path.join(HOME_DIR, '.conflux-lens');
+
+export const CA_DIR = CA_BASE_DIR;
+export const CA_CERT_PATH = path.join(CA_BASE_DIR, 'ca.pem');
+export const CA_KEY_PATH = path.join(CA_BASE_DIR, 'ca-key.pem');
+export const CERT_CACHE_DIR = path.join(CA_BASE_DIR, 'certs');
 
 export interface CertPair {
   cert: string;
