@@ -50,7 +50,7 @@ socket.onmessage = (event) => {
     renderBreakpointsList();
   } else if (msg.type === "replayComplete") {
     console.log("Replay complete", msg.data);
-  } else if (msg.type === "breakpoint") {
+  } else if (msg.type === "breakpoint_hit") {
     showBreakpointAction(msg.data);
   } else if (msg.type === "summary") {
     updateStats();
@@ -271,7 +271,7 @@ function renderRequestList() {
   const list = Array.from(exchanges.values()).filter(matches).sort((a,b) => b.request.timestamp - a.request.timestamp);
   requestCount.textContent = `${list.length} requests`;
   if (list.length === 0) {
-    requestList.innerHTML = `<div class="empty-state"><p>${Object.keys(exchanges).length ? "No matching requests" : "Waiting for Phase 3 requests..."}</p><small>Set HTTP_PROXY=http://localhost:9876</small><br><small>Features: Breakpoints | HAR Export | Replay</small></div>`;
+    requestList.innerHTML = `<div class="empty-state"><p>${Object.keys(exchanges).length ? "No matching requests" : "Waiting for requests..."}</p><small>Set HTTP_PROXY=http://localhost:9876</small><br><small>Features: Breakpoints | HAR Export | Replay</small></div>`;
     return;
   }
   requestList.innerHTML = list.map(ex => {
@@ -420,4 +420,4 @@ document.getElementById("bpReject").addEventListener("click", () => {
 
 window.addEventListener("keydown", e => { if (e.key === "Escape") { breakpointModal.style.display = "none"; replayModal.style.display = "none"; breakpointActionModal.style.display = "none"; } });
 
-console.log("Phase 3 Dashboard: Breakpoints | HAR Export | Replay");
+console.log("Conflux Lens Dashboard: Breakpoints | HAR Export | Replay");

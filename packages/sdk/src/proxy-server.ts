@@ -407,9 +407,25 @@ export class ProxyServer {
   }
 
   private broadcastBreakpointHit(exchangeId: string, type: 'request' | 'response'): void {
+    const exchange = this.exchanges.get(exchangeId);
     const message = JSON.stringify({
       type: 'breakpoint_hit',
-      data: { exchangeId, type },
+      data: {
+        exchangeId,
+        type,
+        request: exchange?.request ? {
+          url: exchange.request.url,
+          method: exchange.request.method,
+          headers: exchange.request.headers,
+          body: exchange.request.body,
+        } : undefined,
+        response: exchange?.response ? {
+          statusCode: exchange.response.statusCode,
+          statusMessage: exchange.response.statusMessage,
+          headers: exchange.response.headers,
+          body: exchange.response.body,
+        } : undefined,
+      },
     });
     for (const client of this.wss.clients) {
       if ((client as any).readyState === 1) {
