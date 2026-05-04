@@ -178,6 +178,80 @@ filterBtns.forEach(btn => btn.addEventListener("click", () => {
 window.removeSearch = () => { searchInput.value = ""; searchQuery = ""; updateFilterTags(); renderRequestList(); searchInput.focus(); };
 function escapeHtml(s) { return s.replace(/[&<>"']/g, m => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[m])); }
 
+/**
+ * Pretty-print and syntax-highlight JSON with proper word wrapping
+ */
+function formatJson(jsonStr, maxDepth = 20) {
+  if (!jsonStr) return '';
+  try {
+    const obj = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+    return syntaxHighlightJson(obj, 0, maxDepth);
+  } catch (e) {
+    return escapeHtml(jsonStr);
+  }
+}
+
+/**
+ * Recursive JSON syntax highlighter
+ */
+function syntaxHighlightJson(obj, depth, maxDepth) {
+  if (depth > maxDepth) return '<span class="json-null">[Max depth]</span>';
+  
+  if (obj === null) return '<span class="json-null">null</span>';
+  if (obj === undefined) return '<span class="json-null">undefined</span>';
+  if (typeof obj === 'boolean') return `<span class="json-boolean">${obj}</span>`;
+  if (typeof obj === 'number') return `<span class="json-number">${obj}</span>`;
+  if (typeof obj === 'string') {
+    const escaped = escapeHtml(obj);
+    return `<span class="json-string">"${escaped}"</span>`;
+  }
+  
+  if (Array.isArray(obj)) {
+    if (obj.length === 0) return '<span class="json-null">[]</span>';
+    const items = obj.map((item, i) => {
+      const comma = i < obj.length - 1 ? ',' : '';
+      const formatted = syntaxHighlightJson(item, depth + 1, maxDepth);
+      return `  ${formatted}${comma}`;
+    }).join('\n');
+    return `[\n${items}\n]`;
+  }
+  
+  if (typeof obj === 'object') {
+    const keys = Object.keys(obj);
+    if (keys.length === 0) return '<span class="json-null">{}</span>';
+    const items = keys.map((key, i) => {
+      const comma = i < keys.length - 1 ? ',' : '';
+      const formatted = syntaxHighlightJson(obj[key], depth + 1, maxDepth);
+      return `  <span class="json-key">"${escapeHtml(key)}"</span>: ${formatted}${comma}`;
+    }).join('\n');
+    return `{\n${items}\n}`;
+  }
+  
+  return escapeHtml(String(obj));
+}
+
+/**
+ * Try to format a string as JSON, falling back to raw text
+ */
+function prettyPrint(body) {
+  if (!body) return '(no body)';
+  
+  const trimmed = body.trim();
+  
+  // Try to detect and format as JSON
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return formatJson(parsed);
+    } catch (e) {
+      // Not valid JSON
+    }
+  }
+  
+  // Return as plain text with HTML escaping
+  return escapeHtml(body);
+}
+
 function matches(exchange) {
   const req = exchange.request;
   if (currentFilter === "error" && exchange.response?.statusCode < 400) return false;
@@ -240,8 +314,8 @@ function renderDetail(id) {
   body += `<p><strong>ID:</strong> ${id} | <strong>Protocol:</strong> ${isHttps?"HTTPS • Encrypted":"HTTP • Plain"} | <strong>Time:</strong> ${new Date(req.timestamp).toLocaleString()}</p>`;
   if (res) body += `<p><strong>Duration:</strong> ${res.duration}ms | <strong>Status:</strong> ${res.statusCode} ${res.statusMessage || ""} | <strong>Size:</strong> ${res.bodySize || 0} bytes</p>`;
   body += `</div>`;
-  body += `<div class="tab-content" id="req-tab"><div class="code-block"><pre>${escapeHtml(req.body || "(no body)")}</pre></div></div>`;
-  body += `<div class="tab-content" id="res-tab" style="display:none">${res ? `<div class="code-block"><pre>${escapeHtml(res.body || "(empty)")}</pre></div><p><strong>Status:</strong> ${res.statusCode} ${res.statusMessage || ""}</p>` : "<p>No response yet</p>"}</div>`;
+  body += `<div class="tab-content" id="req-tab"><div class="code-block"><pre>${prettyPrint(req.body)}</pre></div></div>`;
+  body += `<div class="tab-content" id="res-tab" style="display:none">${res ? `<div class="code-block"><pre>${prettyPrint(res.body)}</pre></div><p><strong>Status:</strong> ${res.statusCode} ${res.statusMessage || ""}</p>` : "<p>No response yet</p>"}</div>`;
   body += `<div class="tab-content" id="hdr-tab" style="display:none"><div class="headers-section"><h4>Request Headers</h4><pre>${escapeHtml(formatHeaders(req.headers))}</pre><h4>Response Headers</h4><pre>${res ? escapeHtml(formatHeaders(res.headers)) : "(no response)"}</pre></div></div>`;
   body += `<div class="tab-content" id="time-tab" style="display:none"><p><strong>Started:</strong> ${new Date(req.timestamp).toISOString()}</p><p><strong>Request Body Size:</strong> ${req.bodySize || 0} bytes</p>${res ? `<p><strong>Response Time:</strong> ${res.duration}ms</p><p><strong>Response Body Size:</strong> ${res.bodySize || 0} bytes</p>` : "<p><strong>Response:</strong> Pending...</p>"}</div>`;
   body += `</div>`;

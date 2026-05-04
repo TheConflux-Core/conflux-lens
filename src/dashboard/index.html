@@ -86,6 +86,73 @@
     </div>
   </div>
 
+  <!-- Breakpoint Modal -->
+  <div class="modal" id="breakpointModal" style="display:none">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Breakpoints</h2>
+        <button class="modal-close" id="closeBreakpointModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="breakpointsContainer"><p style="color:#888">No breakpoints</p></div>
+        <div class="modal-form">
+          <h4>Add Breakpoint</h4>
+          <div class="form-group">
+            <label>Type</label>
+            <select id="bpType"><option value="request">Request</option><option value="response">Response</option><option value="both">Both</option></select>
+          </div>
+          <div class="form-group"><label>Method (optional)</label><input type="text" id="bpMethod" placeholder="GET, POST, etc."></div>
+          <div class="form-group"><label>URL Pattern (optional)</label><input type="text" id="bpUrlPattern" placeholder="e.g., /api/chat"></div>
+          <div class="form-group"><label>Status Code (optional)</label><input type="text" id="bpStatusCode" placeholder="e.g., 200"></div>
+          <button class="btn btn-primary" id="addBreakpoint">Add Breakpoint</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breakpoint Action Modal (intercept/modify) -->
+  <div class="modal" id="breakpointActionModal" style="display:none">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h2>⏸ Breakpoint Hit: <span id="bpActionType">request</span></h2>
+        <button class="modal-close" id="closeBpAction">×</button>
+      </div>
+      <div class="modal-body" id="breakpointActionBody">
+        <div id="bpRequestGroup">
+          <h4>Request</h4>
+          <div class="code-block" id="bpRequestDisplay" style="max-height:200px;overflow-y:auto;"></div>
+        </div>
+        <div id="bpResponseGroup" style="display:none">
+          <h4>Response</h4>
+          <div class="code-block" id="bpResponseDisplay" style="max-height:200px;overflow-y:auto;"></div>
+        </div>
+        <div id="bpModRequestGroup">
+          <h4>Modify Request (optional)</h4>
+          <div class="form-group"><label>URL</label><input type="text" id="bpModUrl" style="width:100%;padding:8px;border-radius:6px;background:var(--bg-tertiary);color:var(--fg);border:1px solid var(--border);"></div>
+          <div class="form-group"><label>Method</label><input type="text" id="bpModMethod" style="width:100%;padding:8px;border-radius:6px;background:var(--bg-tertiary);color:var(--fg);border:1px solid var(--border);"></div>
+          <div class="form-group"><label>Headers (JSON)</label><textarea id="bpModHeaders" rows="3" style="width:100%;padding:8px;border-radius:6px;background:var(--bg-tertiary);color:var(--fg);border:1px solid var(--border);"></textarea></div>
+          <div class="form-group"><label>Body</label><textarea id="bpModBody" rows="4" style="width:100%;padding:8px;border-radius:6px;background:var(--bg-tertiary);color:var(--fg);border:1px solid var(--border);"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-success" id="bpContinue">▶ Continue</button>
+          <button class="btn btn-warning" id="bpModify">✏ Modify & Continue</button>
+          <button class="btn btn-danger" id="bpReject">✕ Reject</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Replay Modal -->
+  <div class="modal" id="replayModal" style="display:none">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Replay Request</h2>
+        <button class="modal-close" id="closeReplayModal">×</button>
+      </div>
+      <div class="modal-body" id="replayBody"></div>
+    </div>
+  </div>
+
   <script src="./app.js"></script>
 </body>
 </html>
