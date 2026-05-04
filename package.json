@@ -6,6 +6,7 @@
   "scripts": {
     "prebuild": "npm run build:sdk",
     "build": "tsc",
+    "postbuild": "mkdir -p dist/dashboard && cp src/dashboard/* dist/dashboard/ && echo \"Dashboard files copied to dist/dashboard/\"",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "setup-trust": "ts-node src/scripts/setup-trust.ts",
