@@ -1,36 +1,33 @@
-# @ai-agent-proxy/sdk
+# @conflux/sdk
 
-TypeScript SDK for programmatic HTTP/HTTPS interception and AI agent traffic monitoring.
+> TypeScript SDK for programmatic HTTP/HTTPS interception and AI agent traffic monitoring.
 
-This library wraps proxy functionality into a consumable npm package for programmatic use by other tools and agents.
-
-## Features
-
-- **Programmatic Proxy Server**: Start/stop proxy servers programmatically
-- **HTTP/HTTPS Interceptor**: Lightweight interceptor for Node.js http/https modules (no proxy config needed)
-- **AI Agent Client**: SDK for AI agents to register and manage proxy sessions
-- **Breakpoint Management**: Pause requests/responses at specific points
-- **HAR Export**: Export captured traffic as HAR format
-- **WebSocket Real-time Updates**: Get live traffic updates via WebSocket
-- **HTTPS Interception**: Decrypt and inspect HTTPS traffic with auto-generated CA certificates
+This is the developer SDK for **Conflux Lens** — the LLM-aware HTTP proxy from The Conflux, LLC.
 
 ## Installation
 
 ```bash
-npm install @ai-agent-proxy/sdk
+npm install @conflux/sdk ws
 ```
 
-Also install the peer dependency:
-```bash
-npm install ws
-```
+## Features
+
+- **Programmatic Proxy Server**: Start/stop proxy servers in code
+- **HTTP/HTTPS Interceptor**: Patch Node.js `http`/`https` modules directly — no proxy config needed
+- **AI Agent Client**: Register AI agents with the proxy, manage sessions
+- **Breakpoint Management**: Pause requests and responses at configurable points
+- **HAR Export**: Export all captured traffic as HAR format
+- **WebSocket Real-time Updates**: Live traffic pushed to any client
+- **HTTPS Interception**: MITM decryption via auto-generated CA certificates
+- **Full TypeScript Types**: All types exported and documented
 
 ## Quick Start
 
 ### Basic Proxy Server
 
 ```typescript
-import { createProxyServer } from '@ai-agent-proxy/sdk';
+import { createProxyServer } from '@conflux/sdk';
+import * as fs from 'fs';
 
 const proxy = createProxyServer({
   port: 9876,
@@ -40,14 +37,13 @@ const proxy = createProxyServer({
 
 await proxy.start();
 
-// Listen for captured exchanges
 proxy.getWss().on('connection', (client) => {
   client.on('message', (data) => {
-    const message = JSON.parse(data.toString());
-    if (message.type === 'exchange') {
-      const exchange = message.data;
-      console.log(`${exchange.request.method} ${exchange.request.url}`);
-      console.log(`Status: ${exchange.response?.statusCode}`);
+    const msg = JSON.parse(data.toString());
+    if (msg.type === 'exchange') {
+      const ex = msg.data;
+      console.log(`${ex.request.method} ${ex.request.url}`);
+      console.log(`Status: ${ex.response?.statusCode}`);
     }
   });
 });
@@ -55,7 +51,7 @@ proxy.getWss().on('connection', (client) => {
 // Add a breakpoint
 proxy.addBreakpoint({
   type: 'request',
-  match: { method: 'POST', urlPattern: '/api/chat' },
+  match: { method: 'POST', urlPattern: '/v1/chat' },
   enabled: true,
 });
 
@@ -63,48 +59,47 @@ proxy.addBreakpoint({
 const har = proxy.exportHar();
 fs.writeFileSync('capture.har', JSON.stringify(har, null, 2));
 
-// Stop the proxy
 await proxy.stop();
 ```
 
 ### HTTP/HTTPS Interceptor (No Proxy Config)
 
-Intercept HTTP/HTTPS requests made through Node.js http/https modules without configuring a proxy:
+Intercepts `http.request` and `https.request` at the Node.js module level. No proxy URL or environment variables needed.
 
 ```typescript
-import { createInterceptor } from '@ai-agent-proxy/sdk';
+import { createInterceptor } from '@conflux/sdk';
 
 const interceptor = createInterceptor({
-  target: 'all', // 'http' | 'https' | 'all'
+  target: 'all',       // 'http' | 'https' | 'all'
   captureBody: true,
   maxBodySize: 100000,
   onRequest: (context) => {
-    console.log('Request:', context.request.url);
-    // Modify request before it goes out
+    console.log('→', context.request.method, context.request.url);
+    // Optionally modify the request
     context.modifyRequest({
       headers: { ...context.request.headers, 'X-Custom': 'value' },
     });
   },
   onResponse: (context) => {
-    console.log('Response:', context.response.statusCode);
-    // Modify response before it returns
+    console.log('←', context.response?.statusCode, context.request.url);
+    // Optionally modify the response
     context.modifyResponse({
       statusCode: 200,
     });
   },
 });
 
-// Later, disable the interceptor
+// Later, uninstall
 interceptor.disable();
-// Or remove all: removeAllInterceptors();
+// Or: removeAllInterceptors();
 ```
 
 ### AI Agent Client
 
-SDK for AI agents to register and manage proxy sessions:
+SDK for AI agents to register sessions and receive real-time exchange events:
 
 ```typescript
-import { AgentClient } from '@ai-agent-proxy/sdk';
+import { AgentClient } from '@conflux/sdk';
 
 const agent = new AgentClient({
   proxyHost: '127.0.0.1',
@@ -114,122 +109,61 @@ const agent = new AgentClient({
 });
 
 agent.on('exchange', (exchange) => {
-  console.log('New exchange:', exchange.request.url);
+  console.log('Captured:', exchange.request.url);
+  console.log('Tokens:', exchange.response?.tokenCount);
 });
 
 agent.on('breakpoint_hit', (data) => {
-  console.log('Breakpoint hit:', data);
+  console.log('Paused at exchange:', data.exchangeId);
 });
 
 agent.on('disconnect', () => {
   console.log('Disconnected from proxy');
 });
 
-// Add breakpoints
 agent.addBreakpoint({
   type: 'request',
-  match: { method: 'POST' },
+  match: { urlPattern: '/v1/chat/completions' },
   enabled: true,
 });
 
-// Export HAR
 const har = await agent.exportHar();
-
 agent.disconnect();
-```
-
-### Start Local Proxy for an Agent
-
-```typescript
-const agent = new AgentClient({ autoConnect: false });
-
-// Start a dedicated proxy server for this agent
-const proxy = await agent.startProxyServer(9876);
-
-// Use the proxy normally
-proxy.getWss().on('connection', (client) => {
-  client.on('message', (data) => {
-    // Handle exchanges
-  });
-});
-
-await proxy.stop();
 ```
 
 ## API Reference
 
-### ProxyServer
+### `createProxyServer(options?)`
 
-Main class for managing a proxy server with interception capabilities.
-
-#### `new ProxyServer(options?)`
+Create a full proxy server instance.
 
 ```typescript
 interface ProxyServerOptions {
-  port?: number;              // Default: 9876
-  host?: string;              // Default: '127.0.0.1'
-  logLevel?: ProxyLogLevel;  // 'silent' | 'info' | 'verbose' | 'debug'
-  autoConfigureTrust?: boolean; // Auto-configure NODE_EXTRA_CA_CERTS
-  wsPort?: number;            // Default: 9877
+  port?: number;           // Default: 9876
+  host?: string;           // Default: '127.0.0.1'
+  logLevel?: 'silent' | 'info' | 'verbose' | 'debug';
+  autoConfigureTrust?: boolean;  // Auto-set NODE_EXTRA_CA_CERTS
+  wsPort?: number;         // Default: 9877
 }
 ```
 
-#### Methods
+#### ProxyServer Methods
 
-- `async start(): Promise<void>` - Start the proxy server
-- `async stop(): Promise<void>` - Stop the proxy server
-- `getExchanges(): CapturedExchange[]` - Get all captured exchanges
-- `getExchange(id: string): CapturedExchange | undefined` - Get exchange by ID
-- `addBreakpoint(breakpoint): Breakpoint` - Add a breakpoint
-- `removeBreakpoint(id: string): boolean` - Remove a breakpoint
-- `listBreakpoints(): Breakpoint[]` - List all breakpoints
-- `resumeBreakpoint(exchangeId, modifications?): Promise<void>` - Resume a paused exchange
-- `clearExchanges(): void` - Clear all exchanges
-- `exportHar(): HarLog` - Export exchanges as HAR
+| Method | Returns | Description |
+|---|---|---|
+| `start()` | `Promise<void>` | Start the proxy |
+| `stop()` | `Promise<void>` | Stop the proxy |
+| `getExchanges()` | `CapturedExchange[]` | All captured exchanges |
+| `getExchange(id)` | `CapturedExchange \| undefined` | Get by ID |
+| `addBreakpoint(bp)` | `Breakpoint` | Add a breakpoint |
+| `removeBreakpoint(id)` | `boolean` | Remove by ID |
+| `listBreakpoints()` | `Breakpoint[]` | List all breakpoints |
+| `resumeBreakpoint(id, mod?)` | `Promise<void>` | Resume a paused exchange |
+| `clearExchanges()` | `void` | Clear all captures |
+| `exportHar()` | `HarLog` | Export as HAR format |
+| `getWss()` | `WebSocketServer` | WebSocket server instance |
 
-#### Breakpoint
-
-```typescript
-interface Breakpoint {
-  type: 'request' | 'response' | 'both';
-  match?: {
-    method?: string | RegExp;
-    urlPattern?: string | RegExp;
-    statusCode?: number;
-  };
-  enabled: boolean;
-}
-```
-
-### createProxyServer()
-
-Convenience function to create a ProxyServer instance:
-
-```typescript
-import { createProxyServer } from '@ai-agent-proxy/sdk';
-
-const proxy = createProxyServer({
-  port: 9876,
-  logLevel: 'info',
-});
-```
-
-### createInterceptor()
-
-Create a lightweight HTTP/HTTPS interceptor for Node.js http/https modules:
-
-```typescript
-const interceptor = createInterceptor({
-  target: 'all',
-  captureBody: true,
-  maxBodySize: 100000,
-  onRequest: (context) => { ... },
-  onResponse: (context) => { ... },
-});
-
-interceptor.enable();
-interceptor.disable();
-```
+### `createInterceptor(config)`
 
 ```typescript
 interface InterceptorConfig {
@@ -241,70 +175,36 @@ interface InterceptorConfig {
 }
 ```
 
-### removeAllInterceptors()
+Returns `{ enable, disable, isEnabled }`.
 
-Remove all active interceptors and uninstall patching:
-
-```typescript
-import { removeAllInterceptors } from '@ai-agent-proxy/sdk';
-
-removeAllInterceptors();
-```
-
-### getInterceptorCount()
-
-Get the number of active interceptors:
-
-```typescript
-import { getInterceptorCount } from '@ai-agent-proxy/sdk';
-
-console.log('Active interceptors:', getInterceptorCount());
-```
-
-### AgentClient
-
-SDK for AI agents to register and manage proxy sessions.
-
-#### `new AgentClient(config?)`
+### `AgentClient`
 
 ```typescript
 interface AgentClientConfig {
-  proxyHost?: string;      // Default: '127.0.0.1'
-  proxyPort?: number;      // Default: 9876
-  wsPort?: number;         // Default: 9877
-  apiKey?: string;
-  sessionId?: string;      // Auto-generated if not provided
-  autoConnect?: boolean;   // Default: true
+  proxyHost?: string;
+  proxyPort?: number;
+  wsPort?: number;
+  sessionId?: string;       // Auto-generated if omitted
+  autoConnect?: boolean;    // Default: true
 }
 ```
 
-#### Methods
+#### AgentClient Events
 
-- `async connect(): Promise<void>` - Connect to proxy
-- `disconnect(): void` - Disconnect from proxy
-- `async startProxyServer(port?): Promise<ProxyServer>` - Start local proxy
-- `async stopProxyServer(): Promise<void>` - Stop local proxy
-- `on(event, handler): void` - Add event listener
-- `off(event, handler): void` - Remove event listener
-- `async getExchanges(): Promise<CapturedExchange[]>` - Get exchanges
-- `addBreakpoint(breakpoint): Breakpoint | undefined` - Add breakpoint
-- `removeBreakpoint(id): boolean` - Remove breakpoint
-- `async exportHar(): Promise<HarLog>` - Export HAR
-- `getSession(): AgentSession | null` - Get session info
-- `isConnectedToProxy(): boolean` - Check connection status
+- `exchange` — New request/response captured
+- `breakpoint_hit` — Exchange hit a breakpoint
+- `disconnect` — WebSocket disconnected
+- `message` — Any other message from proxy
 
-#### Events
+#### AgentClient Methods
 
-- `exchange` - Fired when a new exchange is captured
-- `breakpoint_hit` - Fired when a breakpoint is hit
-- `disconnect` - Fired when disconnected
-- `message` - Fired for any other message
-
-```typescript
-agent.on('exchange', (exchange) => {
-  console.log('New exchange:', exchange.request.url);
-});
-```
+- `connect()` / `disconnect()`
+- `startProxyServer(port?)` / `stopProxyServer()`
+- `getExchanges()`
+- `addBreakpoint()` / `removeBreakpoint()`
+- `exportHar()`
+- `getSession()`
+- `isConnectedToProxy()`
 
 ### Certificate Management
 
@@ -314,21 +214,12 @@ import {
   generateCertForHost,
   getCAFingerprint,
   CA_CERT_PATH,
-} from '@ai-agent-proxy/sdk';
-
-// Load or create root CA
-const { cert, key } = loadOrCreateRootCA();
-
-// Generate certificate for a host
-const hostCert = generateCertForHost('example.com');
-
-// Get CA fingerprint
-const fp = getCAFingerprint();
+} from '@conflux/sdk';
 ```
 
-### Types
+CA cert stored at `~/.conflux-lens/ca.pem`.
 
-All types are exported:
+### Type Exports
 
 ```typescript
 import type {
@@ -337,81 +228,44 @@ import type {
   CapturedResponse,
   CapturedExchange,
   Breakpoint,
+  InterceptContext,
   HarLog,
-  // ... more
-} from '@ai-agent-proxy/sdk';
+  AgentClientConfig,
+} from '@conflux/sdk';
 ```
 
-See `types.d.ts` for the complete type definitions.
+---
 
 ## HTTPS Interception
 
-To intercept HTTPS traffic, the proxy uses a man-in-the-middle (MITM) approach with a root CA certificate.
-
-### Setup
+Set `autoConfigureTrust: true` when creating the proxy server to auto-configure Node.js:
 
 ```typescript
 const proxy = createProxyServer({
-  autoConfigureTrust: true, // Auto-configures NODE_EXTRA_CA_CERTS
+  autoConfigureTrust: true,   // Sets NODE_EXTRA_CA_CERTS automatically
 });
 ```
 
 Or manually:
-
 ```bash
-export NODE_EXTRA_CA_CERTS="$HOME/.ai-agent-proxy/ca.pem"
+export NODE_EXTRA_CA_CERTS="$HOME/.conflux-lens/ca.pem"
 ```
 
-The CA certificate is auto-generated on first run at:
-- `~/.ai-agent-proxy/ca.pem` (certificate)
-- `~/.ai-agent-proxy/ca-key.pem` (private key)
+CA certificate location: `~/.conflux-lens/ca.pem`
 
-### Trust the CA
-
-For HTTPS interception to work, the CA must be trusted by your applications:
-
-**Node.js**:
-```bash
-export NODE_EXTRA_CA_CERTS="$HOME/.ai-agent-proxy/ca.pem"
-```
-
-**Chrome/Firefox**: Import `ca.pem` into trusted root certificates.
-
-**cURL**: `curl --cacert ~/.ai-agent-proxy/ca.pem https://example.com`
+---
 
 ## Examples
 
 See the `examples/` directory:
 
-- `basic-proxy.js` - Basic proxy server example
-- `intercept-llm-calls.js` - Monitor LLM API calls
-- `har-export.js` - Export traffic as HAR
-- `breakpoint-demo.js` - Breakpoint usage demo
-- `test-basic.js` - Simple SDK test
+- `basic-proxy.js` — Simple proxy server
+- `intercept-llm-calls.js` — Monitor OpenAI/Anthropic calls
+- `har-export.js` — Capture and export HAR
+- `breakpoint-demo.js` — Pause and inspect requests
 
-## Architecture
-
-```
-
-   Your Application    
-
-           
-           
-
-   @ai-agent-proxy/sdk                 
-   
-   ProxyServer      WebSocket    
-   - HTTP/HTTPS                    Clients
-   - Breakpoints                    Dashboard
-   - HAR Export                   
-   
-           
-           
-
-   Target Server     
-
-```
+---
 
 ## License
 
-MIT
+MIT — © 2026 The Conflux, LLC

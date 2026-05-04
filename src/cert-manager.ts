@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 const HOME_DIR = os.homedir();
-export const CA_DIR = path.join(HOME_DIR, '.ai-agent-proxy');
+export const CA_DIR = path.join(HOME_DIR, '.conflux-lens');
 export const CA_CERT_PATH = path.join(CA_DIR, 'ca.pem');
 export const CA_KEY_PATH = path.join(CA_DIR, 'ca-key.pem');
 export const CERT_CACHE_DIR = path.join(CA_DIR, 'certs');
@@ -31,8 +31,8 @@ export function generateRootCA(): { cert: string; key: string } {
   cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 10);
 
   const attrs = [
-    { name: 'commonName', value: 'AI Agent Proxy CA' },
-    { name: 'organizationName', value: 'AI Agent Proxy' },
+    { name: 'commonName', value: 'Conflux Lens CA' },
+    { name: 'organizationName', value: 'Conflux Lens' },
     { name: 'organizationalUnitName', value: 'Development' },
   ];
 

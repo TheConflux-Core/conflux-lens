@@ -268,7 +268,7 @@ export class AgentClient {
     return {
       version: '1.2',
       creator: {
-        name: 'AI Agent Proxy SDK',
+        name: 'Conflux Lens SDK',
         version: '0.1.0',
       },
       pages: [],

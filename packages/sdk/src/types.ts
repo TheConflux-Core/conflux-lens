@@ -1,5 +1,5 @@
 /**
- * Core types for the AI Agent Proxy SDK
+ * Core types for the Conflux Lens SDK
  */
 
 export type ProxyLogLevel = 'silent' | 'info' | 'verbose' | 'debug';
@@ -30,7 +30,7 @@ export interface InterceptorConfig {
   captureBody?: boolean;
   /** Maximum body size to capture in bytes (default: 50KB) */
   maxBodySize?: number;
-  /** Custom CA certificate directory (default: ~/.ai-agent-proxy) */
+  /** Custom CA certificate directory (default: ~/.conflux-lens) */
   caDir?: string;
 }
 

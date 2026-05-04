@@ -1,7 +1,7 @@
 {
-  "name": "@ai-agent-proxy/sdk",
+  "name": "@conflux/sdk",
   "version": "0.1.0",
-  "description": "TypeScript SDK for programmatic HTTP/HTTPS interception and AI agent traffic monitoring",
+  "description": "TypeScript SDK for programmatic HTTP/HTTPS interception and AI agent traffic monitoring with Conflux Lens",
   "main": "dist/index.js",
   "files": [
     "dist"
@@ -18,9 +18,11 @@
     "https",
     "intercept",
     "ai-agent",
+    "conflux",
+    "lens",
     "sdk"
   ],
-  "author": "AI Agent Proxy Team",
+  "author": "The Conflux, LLC",
   "license": "MIT",
   "peerDependencies": {
     "ws": "^8.18.0"

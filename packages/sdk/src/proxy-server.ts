@@ -202,7 +202,7 @@ export class ProxyServer {
     this.broadcastExchange(exchange);
 
     socket.write('HTTP/1.1 200 Connection Established\r\n');
-    socket.write('Proxy-Agent: AI-Agent-Proxy\r\n');
+    socket.write('Proxy-Agent: Conflux Lens\r\n');
     socket.write('\r\n');
 
     const mitmServer = net.createServer((clientSocket) => {
@@ -387,7 +387,7 @@ export class ProxyServer {
     return {
       version: '1.2',
       creator: {
-        name: 'AI Agent Proxy SDK',
+        name: 'Conflux Lens SDK',
         version: '0.1.0',
       },
       pages: [],

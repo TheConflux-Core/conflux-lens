@@ -9,7 +9,7 @@ The `https-intercept.ts` module implements HTTPS MITM (Man-in-the-Middle) interc
 ### 1. Root CA Generation (`cert-manager.ts`)
 
 On first run, generates a root CA certificate and private key:
-- Location: `~/.ai-agent-proxy/ca.pem` (cert) and `ca-key.pem` (key)
+- Location: `~/.conflux-lens/ca.pem` (cert) and `ca-key.pem` (key)
 - 2048-bit RSA key pair
 - 10-year validity
 - Stored in user's home directory
@@ -93,13 +93,13 @@ server.on('connect', (req, socket, head) => {
 npm run setup-trust setup
 
 # Follow printed instructions to configure Node.js
-export NODE_EXTRA_CA_CERTS="~/.ai-agent-proxy/ca.pem"
+export NODE_EXTRA_CA_CERTS="~/.conflux-lens/ca.pem"
 
 # Verify
 npm run setup-trust verify
 ```
 
-For other languages (Python, Ruby, etc.), configure their respective trust stores to trust `~/.ai-agent-proxy/ca.pem`.
+For other languages (Python, Ruby, etc.), configure their respective trust stores to trust `~/.conflux-lens/ca.pem`.
 
 ## Files
 
@@ -111,7 +111,7 @@ For other languages (Python, Ruby, etc.), configure their respective trust store
 
 ## Security Notes
 
-- CA private key is stored unencrypted - protect `~/.ai-agent-proxy/ca-key.pem`
+- CA private key is stored unencrypted - protect `~/.conflux-lens/ca-key.pem`
 - Generated host certs are cached in memory, not persisted to disk
 - Each unique hostname gets its own certificate
 - Certificate chain: Host Cert → Root CA

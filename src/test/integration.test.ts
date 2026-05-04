@@ -1,5 +1,5 @@
 /**
- * Integration Test Suite for AI Agent Proxy
+ * Integration Test Suite for Conflux Lens
  * 
  * Tests all major features:
  * 1. HTTP/HTTPS request interception via SDK proxy
@@ -9,7 +9,7 @@
  * 5. HTTP interceptor (module patching)
  */
 
-import { createProxyServer, createInterceptor, AgentClient } from '@ai-agent-proxy/sdk';
+import { createProxyServer, createInterceptor, AgentClient } from '@conflux/sdk';
 import * as http from 'http';
 import * as https from 'https';
 import { URL } from 'url';
@@ -315,7 +315,7 @@ async function testHarExport(): Promise<boolean> {
     if (har.entries.length !== 3) {
       throw new Error(`Expected 3 HAR entries, got ${har.entries.length}`);
     }
-    if (!har.creator.name.includes('AI Agent Proxy')) {
+    if (!har.creator.name.includes('Conflux Lens')) {
       throw new Error('Invalid HAR creator');
     }
 
@@ -471,7 +471,7 @@ async function testAgentClient(): Promise<boolean> {
  */
 async function runAllTests(): Promise<void> {
   console.log('\n========================================');
-  console.log('  AI Agent Proxy - Integration Tests');
+  console.log('  Conflux Lens - Integration Tests');
   console.log('========================================');
 
   const results: { name: string; passed: boolean }[] = [];

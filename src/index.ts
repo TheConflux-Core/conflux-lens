@@ -1,4 +1,4 @@
-import { createProxyServer, createInterceptor, AgentClient } from '@ai-agent-proxy/sdk';
+import { createProxyServer, createInterceptor, AgentClient } from '@conflux/sdk';
 import * as http from 'http';
 import * as net from 'net';
 import * as fs from 'fs';
@@ -19,7 +19,7 @@ const DASH_PORT = parseInt(process.env.DASH_PORT || '3000');
  * SDK-Integrated Proxy Server
  * =========================
  * 
- * This main proxy server uses the @ai-agent-proxy/sdk for:
+ * This main proxy server uses the @conflux/sdk for:
  * - ProxyServer (createProxyServer) for programmatic proxy management
  * - AgentClient for programmatic session control  
  * - Interceptor (createInterceptor) for HTTP/HTTPS module interception
@@ -294,7 +294,7 @@ const dashboardServer = http.createServer((req, res) => {
 });
 
 // ===== Startup Sequence =====
-console.log('\n=== AI Agent Proxy Starting (SDK-Integrated) ===\n');
+console.log('\n=== Conflux Lens Starting (SDK-Integrated) ===\n');
 
 // Initialize CA certificates
 loadOrCreateRootCA();
@@ -315,6 +315,14 @@ proxyServer.start().then(() => {
 });
 
 // Start dashboard
+ dashboardServer.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ Port ${DASH_PORT} is already in use. Is another instance running?`);
+    console.error(`   Try: lsof -i :${DASH_PORT} | grep LISTEN`);
+    process.exit(1);
+  }
+  throw err;
+});
  dashboardServer.listen(DASH_PORT, () => {
   console.log(`\n📊 Dashboard:   http://localhost:${DASH_PORT}`);
 });

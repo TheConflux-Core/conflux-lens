@@ -1,4 +1,4 @@
-# AI Agent Proxy — Design Document
+# Conflux Lens — Design Document
 ## "What the hell is actually being sent to these APIs?!"
 ### May 2, 2026
 
@@ -41,7 +41,7 @@ A lightweight, always-on proxy that sits between your AI agents and the cloud LL
 │                    YOUR MACHINE                              │
 │                                                              │
 │  ┌──────────┐     ┌──────────────────────┐     ┌─────────┐ │
-│  │  Hermes   │────▶│   AI Agent Proxy     │────▶│ OpenAI  │ │
+│  │  Hermes   │────▶│   Conflux Lens     │────▶│ OpenAI  │ │
 │  │  Agent    │     │   (localhost:9876)   │     │ API     │ │
 │  └──────────┘     │                      │     └─────────┘ │
 │                    │  • Captures request   │                  │
@@ -119,7 +119,7 @@ A real-time web UI showing:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  🔍 AI Agent Proxy                              [Intercept: OFF] │
+│  🔍 Conflux Lens                              [Intercept: OFF] │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │  #  Time     Method  URL                            Status  Size │

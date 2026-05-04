@@ -1,5 +1,5 @@
 # BurpSuite & FoxyProxy Deep Dive Research
-## AI Agent Proxy Project — Research Phase
+## Conflux Lens Project — Research Phase
 ### May 2, 2026
 
 ---

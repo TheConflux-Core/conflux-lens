@@ -1,13 +1,13 @@
-# AI Agent Proxy — Quick Start & Architecture
+# Conflux Lens — Quick Start & Architecture
 
 ## Project Structure
 
 ```
-ai-agent-proxy/
+conflux-lens/
 ├── research/
 │   └── burp-foxyproxy-deep-dive.md    # Deep dive into Burp + FoxyProxy
 ├── design/
-│   └── ai-agent-proxy-design.md        # Full design document
+│   └── conflux-lens-design.md        # Full design document
 ├── docs/
 │   ├── project-overview.md             # This file
 │   └── (future: API docs, user guide)
@@ -121,9 +121,9 @@ open http://localhost:3000
 | Styling | Custom CSS (dark theme, cyan/accent) |
 | Build | TypeScript |
 
-## Comparison: BurpSuite vs AI Agent Proxy
+## Comparison: BurpSuite vs Conflux Lens
 
-| Feature | BurpSuite Pro | AI Agent Proxy |
+| Feature | BurpSuite Pro | Conflux Lens |
 |---------|--------------|----------------|
 | Price | $449/year | **Free** (open source) |
 | HTTP Proxy | ✅ | ✅ |

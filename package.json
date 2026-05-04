@@ -1,19 +1,20 @@
 {
-  "name": "ai-agent-proxy",
+  "name": "@conflux/lens",
   "version": "0.3.0",
-  "description": "LLM-aware HTTP proxy for inspecting AI agent API traffic with HTTPS interception",
+  "description": "Conflux Lens — LLM-aware HTTP proxy for inspecting and debugging AI agent API traffic",
   "main": "dist/index.js",
   "scripts": {
+    "prebuild": "npm run build:sdk",
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "setup-trust": "ts-node scripts/setup-trust.ts",
+    "setup-trust": "ts-node src/scripts/setup-trust.ts",
     "build:sdk": "cd packages/sdk && npm run build",
     "test": "ts-node src/test/integration.test.ts",
     "demo": "ts-node src/test/demo.ts"
   },
   "dependencies": {
-    "@ai-agent-proxy/sdk": "file:./packages/sdk",
+    "@conflux/sdk": "file:./packages/sdk",
     "@types/http-proxy-middleware": "^0.19.3",
     "http-proxy": "^1.18.1",
     "http-proxy-middleware": "^3.0.5",

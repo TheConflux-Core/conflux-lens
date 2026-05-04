@@ -1,5 +1,5 @@
 /**
- * AI Agent Proxy SDK
+ * Conflux Lens SDK
  * 
  * Programmatic HTTP/HTTPS interception and AI agent traffic monitoring
  * 

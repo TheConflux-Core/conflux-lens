@@ -128,7 +128,7 @@ export function handleHttpsConnect(
 
   // Generate response to CONNECT request
   socket.write('HTTP/1.1 200 Connection Established\r\n');
-  socket.write('Proxy-Agent: AI-Agent-Proxy\r\n');
+  socket.write('Proxy-Agent: Conflux-Lens\r\n');
   socket.write('\r\n');
 
   // If first byte of TLS handshake is present in head buffer, handle it

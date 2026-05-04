@@ -1,4 +1,4 @@
-# @ai-agent-proxy/sdk - Phase 4 Implementation Summary
+# @conflux-lens/sdk - Phase 4 Implementation Summary
 
 ## Overview
 Complete TypeScript SDK for programmatic HTTP/HTTPS interception and AI agent traffic monitoring.
@@ -162,14 +162,14 @@ All components tested:
 
 ```bash
 # Install
-npm install @ai-agent-proxy/sdk ws
+npm install @conflux-lens/sdk ws
 
 # Import
 import { 
   createProxyServer, 
   createInterceptor, 
   AgentClient 
-} from '@ai-agent-proxy/sdk';
+} from '@conflux-lens/sdk';
 
 # Use
 const proxy = createProxyServer({ port: 9876 });

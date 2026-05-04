@@ -1,5 +1,5 @@
 /**
- * Demo Script for AI Agent Proxy - Phase 5 Integration Demo
+ * Demo Script for Conflux Lens - Phase 5 Integration Demo
  * 
  * This script demonstrates all features of the integrated proxy:
  * - SDK-based proxy server with WebSocket updates
@@ -9,12 +9,12 @@
  * - AgentClient programmatic control
  */
 
-import { createProxyServer, createInterceptor, AgentClient } from '@ai-agent-proxy/sdk';
+import { createProxyServer, createInterceptor, AgentClient } from '@conflux/sdk';
 import * as http from 'http';
 import * as fs from 'fs';
 
 console.log('\n' + '='.repeat(60));
-console.log('  AI Agent Proxy - Phase 5 Integration Demo');
+console.log('  Conflux Lens - Phase 5 Integration Demo');
 console.log('='.repeat(60) + '\n');
 
 const DEMO_PORT = 19890;

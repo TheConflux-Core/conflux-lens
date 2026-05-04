@@ -10,7 +10,7 @@ const args = process.argv.slice(2);
 
 function printHelp(): void {
   console.log(`
-AI Agent Proxy - HTTPS Interception Setup
+Conflux Lens - HTTPS Interception Setup
 ==========================================
 
 Usage: npm run setup-trust [command]
