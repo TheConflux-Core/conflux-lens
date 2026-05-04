@@ -25,6 +25,7 @@
         </div>
         <div class="stats">
           <span id="exchangeCount">0 requests</span>
+          <span id="breakpointCount">0 breakpoints</span>
           <span id="avgTime"></span>
         </div>
       </div>
@@ -36,14 +37,21 @@
           </svg>
           Clear
         </button>
-        <label class="btn btn-primary" id="exportBtn" title="Export to file">
+        <button class="btn btn-secondary" id="harExportBtn" title="Export HAR">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7,10 12,15 17,10"></polyline>
             <line x1="12" y1="15" x2="12" y2="3"></line>
           </svg>
-          Export
-        </label>
+          HAR
+        </button>
+        <button class="btn btn-primary" id="breakpointsBtn" title="Manage Breakpoints">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <rect x="9" y="9" width="6" height="6"></rect>
+          </svg>
+          Breakpoints
+        </button>
       </div>
     </header>
 
