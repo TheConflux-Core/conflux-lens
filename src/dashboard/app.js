@@ -271,7 +271,7 @@ function renderRequestList() {
   const list = Array.from(exchanges.values()).filter(matches).sort((a,b) => b.request.timestamp - a.request.timestamp);
   requestCount.textContent = `${list.length} requests`;
   if (list.length === 0) {
-    requestList.innerHTML = `<div class="empty-state"><p>${Object.keys(exchanges).length ? "No matching requests" : "Waiting for requests..."}</p><small>Set HTTP_PROXY=http://localhost:9876</small><br><small>Features: Breakpoints | HAR Export | Replay</small></div>`;
+    requestList.innerHTML = `<div class="empty-state"><p>${exchanges.size > 0 ? "No matching requests" : "⏳ Waiting for traffic..."}</p><small>Set HTTP_PROXY=http://localhost:9876</small><br><small>Breakpoints · HAR Export · Replay</small></div>`;
     return;
   }
   requestList.innerHTML = list.map(ex => {
@@ -306,19 +306,89 @@ function renderDetail(id) {
   const req = ex.request;
   const res = ex.response;
   const isHttps = ex.isHttps;
+
+  // Detect LLM API calls
+  const urlLower = (req.url || "").toLowerCase();
+  const isLlmCall = urlLower.includes("openai") || urlLower.includes("anthropic") || urlLower.includes("v1/chat/") || urlLower.includes("v1/completions") || urlLower.includes("api.anthropic") || urlLower.includes("googleai") || urlLower.includes("gemini") || urlLower.includes("mistral") || urlLower.includes("cohere") || urlLower.includes("deepseek") || urlLower.includes("xai");
+
+  // Extract token usage from response body if LLM call
+  let tokens = null;
+  let cost = null;
+  const modelPrices = { "gpt-4": { in: 30, out: 60 }, "gpt-4o": { in: 2.5, out: 10 }, "gpt-4o-mini": { in: 0.15, out: 0.6 }, "claude-3": { in: 3, out: 15 }, "claude-3.5": { in: 3, out: 15 }, "claude-sonnet-4": { in: 3, out: 15 }, "deepseek-chat": { in: 0.27, out: 1.1 }, default: { in: 2, out: 8 } };
+  if (isLlmCall && res && res.body) {
+    try {
+      const parsed = typeof res.body === 'string' ? JSON.parse(res.body) : res.body;
+      if (parsed.usage) {
+        tokens = { prompt: parsed.usage.prompt_tokens || 0, completion: parsed.usage.completion_tokens || 0, total: (parsed.usage.prompt_tokens || 0) + (parsed.usage.completion_tokens || 0) };
+        const model = (parsed.model || req.body ? req.body.match(/"model"\s*:\s*"([^"]+)"/) : null)?.[1] || "default";
+        const prices = modelPrices[model] || modelPrices.default;
+        cost = { prompt: (tokens.prompt / 1000000 * prices.in).toFixed(4), completion: (tokens.completion / 1000000 * prices.out).toFixed(4), total: ((tokens.prompt * prices.in + tokens.completion * prices.out) / 1000000).toFixed(4) };
+      }
+    } catch (e) {}
+  }
+
   let body = "";
-  body += `<div class="detail-header"><h2>${escapeHtml(req.method)} ${escapeHtml(req.url)}</h2>`;
-  body += `<div class="detail-tabs"><button class="detail-tab active" onclick="showDetailTab('request',this)">Request</button><button class="detail-tab" onclick="showDetailTab('response',this)">Response</button><button class="detail-tab" onclick="showDetailTab('headers',this)">Headers</button><button class="detail-tab" onclick="showDetailTab('timing',this)">Timing</button>`;
-  body += `<button class="detail-tab" onclick="openReplayModal('${id}')">↻ Replay</button></div></div>`;
-  body += `<div class="detail-section"><div class="detail-metadata">`;
-  body += `<p><strong>ID:</strong> ${id} | <strong>Protocol:</strong> ${isHttps?"HTTPS • Encrypted":"HTTP • Plain"} | <strong>Time:</strong> ${new Date(req.timestamp).toLocaleString()}</p>`;
-  if (res) body += `<p><strong>Duration:</strong> ${res.duration}ms | <strong>Status:</strong> ${res.statusCode} ${res.statusMessage || ""} | <strong>Size:</strong> ${res.bodySize || 0} bytes</p>`;
+  // Header with metadata
+  body += `<div class="detail-header" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px">`;
+  body += `<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">`;
+  const methodColor = req.method==="POST"?"#10b981":req.method==="PUT"?"#f59e0b":req.method==="DELETE"?"#ef4444":"#4f46e5";
+  body += `<span style="padding:4px 12px;border-radius:4px;font-weight:700;font-size:13px;text-transform:uppercase;background:${methodColor}20;color:${methodColor}">${escapeHtml(req.method)}</span>`;
+  body += `<span style="font-size:14px;font-weight:500;word-break:break-all;color:var(--fg)">${escapeHtml(req.url)}</span>`;
+  if (isLlmCall) body += `<span style="margin-left:auto;padding:3px 10px;border-radius:12px;background:rgba(34,211,238,0.2);color:var(--cyan);font-size:11px;font-weight:600">LLM</span>`;
   body += `</div>`;
+  body += `<div style="display:flex;gap:20px;font-size:12px;color:var(--fg-muted)">`;
+  body += `<span>🆔 ${id}</span>`;
+  body += `<span>🔒 ${isHttps?"HTTPS":"HTTP"}</span>`;
+  body += `<span>🕐 ${new Date(req.timestamp).toLocaleString()}</span>`;
+  if (res) body += `<span>⏱ ${res.duration}ms</span>`;
+  if (res) body += `<span>📦 ${res.bodySize || 0}B</span>`;
+  if (isLlmCall && tokens) body += `<span>📊 ${tokens.total} tokens</span>`;
+  body += `</div>`;
+  if (isLlmCall && cost) body += `<div style="margin-top:10px;padding:10px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);border-radius:var(--radius-sm)"><span style="font-size:13px;font-weight:600;color:var(--success)">$${cost.total}</span><span style="font-size:11px;color:var(--fg-muted);margin-left:8px">(prompt: $${cost.prompt} · completion: $${cost.completion})</span></div>`;
+  body += `</div>`;
+
+  // Tabs
+  body += `<div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px">`;
+  body += `<button class="detail-tab active" onclick="showDetailTab('request',this)">Request</button>`;
+  body += `<button class="detail-tab" onclick="showDetailTab('response',this)">Response</button>`;
+  body += `<button class="detail-tab" onclick="showDetailTab('headers',this)">Headers</button>`;
+  body += `<button class="detail-tab" onclick="showDetailTab('timing',this)">Timing</button>`;
+  body += `<button class="detail-tab" onclick="openReplayModal('${id}')">↻ Replay</button></div>`;
+
+  // Request tab
   body += `<div class="tab-content" id="req-tab"><div class="code-block"><pre>${prettyPrint(req.body)}</pre></div></div>`;
-  body += `<div class="tab-content" id="res-tab" style="display:none">${res ? `<div class="code-block"><pre>${prettyPrint(res.body)}</pre></div><p><strong>Status:</strong> ${res.statusCode} ${res.statusMessage || ""}</p>` : "<p>No response yet</p>"}</div>`;
-  body += `<div class="tab-content" id="hdr-tab" style="display:none"><div class="headers-section"><h4>Request Headers</h4><pre>${escapeHtml(formatHeaders(req.headers))}</pre><h4>Response Headers</h4><pre>${res ? escapeHtml(formatHeaders(res.headers)) : "(no response)"}</pre></div></div>`;
-  body += `<div class="tab-content" id="time-tab" style="display:none"><p><strong>Started:</strong> ${new Date(req.timestamp).toISOString()}</p><p><strong>Request Body Size:</strong> ${req.bodySize || 0} bytes</p>${res ? `<p><strong>Response Time:</strong> ${res.duration}ms</p><p><strong>Response Body Size:</strong> ${res.bodySize || 0} bytes</p>` : "<p><strong>Response:</strong> Pending...</p>"}</div>`;
+
+  // Response tab
+  body += `<div class="tab-content" id="res-tab" style="display:none">`;
+  if (res) {
+    if (res.statusCode >= 400) body += `<div style="padding:8px 14px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius-sm);margin-bottom:12px;font-size:13px;color:var(--error)"><strong>${res.statusCode} ${escapeHtml(res.statusMessage || "")}</strong></div>`;
+    body += `<div class="code-block"><pre>${prettyPrint(res.body)}</pre></div>`;
+    if (isLlmCall && tokens) {
+      body += `<div style="margin-top:12px"><div class="token-stats">`;
+      body += `<div class="token-stat prompt"><div class="stat-value">${tokens.prompt.toLocaleString()}</div><div class="stat-label">Prompt Tokens</div></div>`;
+      body += `<div class="token-stat completion"><div class="stat-value">${tokens.completion.toLocaleString()}</div><div class="stat-label">Completion Tokens</div></div>`;
+      body += `<div class="token-stat total"><div class="stat-value">${tokens.total.toLocaleString()}</div><div class="stat-label">Total Tokens</div></div>`;
+      body += `</div></div>`;
+    }
+  } else {
+    body += `<p style="color:var(--fg-muted)">No response yet</p>`;
+  }
   body += `</div>`;
+
+  // Headers tab
+  body += `<div class="tab-content" id="hdr-tab" style="display:none"><div class="headers-section"><h4>Request Headers</h4><pre style="font-size:12px;line-height:1.7">${escapeHtml(formatHeaders(req.headers))}</pre>`;
+  if (res) body += `<h4>Response Headers</h4><pre style="font-size:12px;line-height:1.7">${escapeHtml(formatHeaders(res.headers))}</pre>`;
+  body += `</div></div>`;
+
+  // Timing tab
+  body += `<div class="tab-content" id="time-tab" style="display:none">`;
+  body += `<div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px">`;
+  body += `<p style="margin-bottom:8px"><strong>Started:</strong> ${new Date(req.timestamp).toISOString()}</p>`;
+  body += `<p style="margin-bottom:8px"><strong>Request Body:</strong> ${req.bodySize || 0} bytes</p>`;
+  if (res) body += `<p style="margin-bottom:8px"><strong>Response Time:</strong> ${res.duration}ms</p>`;
+  if (res) body += `<p><strong>Response Body:</strong> ${res.bodySize || 0} bytes</p>`;
+  body += `</div></div>`;
+
   detailPane.innerHTML = body;
 }
 
@@ -370,19 +440,24 @@ window.executeReplay = (origId) => {
 
 function showBreakpointAction(data) {
   breakpointActionModal.style.display = "flex";
-  document.getElementById("bpActionType").textContent = data.type;
-  document.getElementById("bpRequestDisplay").textContent = JSON.stringify(data.request, null, 2);
+  document.getElementById("bpActionType").textContent = data.type === "request" ? "Incoming Request" : "Response Ready";
+  document.getElementById("bpActionTypeTitle").textContent = data.type === "request" ? "Incoming Request" : "Response";
+  
+  // Use syntax highlighting for intercepted request/response
+  document.getElementById("bpRequestDisplay").innerHTML = prettyPrint(JSON.stringify(data.request, null, 2));
   const respGroup = document.getElementById("bpResponseGroup");
   if (data.response) {
     respGroup.style.display = "block";
-    document.getElementById("bpResponseDisplay").textContent = JSON.stringify(data.response, null, 2);
+    document.getElementById("bpResponseDisplay").innerHTML = prettyPrint(JSON.stringify(data.response, null, 2));
   } else { respGroup.style.display = "none"; }
-  const dlg = document.getElementById("breakpointActionBody");
-  dlg.querySelectorAll("[id$='Group']").forEach(el => el.style.display = data.type === "request" ? "block" : "none");
+  
+  const urlGroup = document.getElementById("bpModRequestGroup");
+  urlGroup.style.display = data.type === "request" ? "block" : "none";
   document.getElementById("bpModUrl").value = data.request.url || "";
   document.getElementById("bpModMethod").value = data.request.method || "GET";
   document.getElementById("bpModHeaders").value = JSON.stringify(data.request.headers || {}, null, 2);
   document.getElementById("bpModBody").value = data.request.body || "";
+  const dlg = document.getElementById("breakpointActionBody");
   dlg.dataset.exchangeId = data.exchangeId;
   dlg.dataset.type = data.type;
 }

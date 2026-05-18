@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `https-intercept.ts` module implements HTTPS MITM (Man-in-the-Middle) interception for inspecting encrypted LLM API traffic. It uses dynamically-generated CA certificates similar to BurpSuite.
+HTTPS MITM (Man-in-the-Middle) interception for inspecting encrypted LLM API traffic — dynamically-generated CA certificates similar to BurpSuite. The MITM logic lives in `packages/sdk/src/proxy-server.ts`.
 
 ## Architecture
 
@@ -22,9 +22,9 @@ For each unique hostname requested via CONNECT:
 - Caches in memory for performance
 - 1-year validity per host cert
 
-### 3. CONNECT Tunneling (`https-intercept.ts`)
+### 3. CONNECT Tunneling (SDK proxy-server.ts)
 
-Standard HTTP CONNECT flow:
+Standard HTTP CONNECT flow — handled by `ProxyServer.handleHttpsConnect()`:
 1. Client sends: `CONNECT example.com:443 HTTP/1.1`
 2. Proxy responds: `HTTP/1.1 200 Connection Established`
 3. Client initiates TLS handshake with proxy
@@ -71,20 +71,7 @@ Returns `{ configured: boolean, message: string }` indicating if Node.js trust i
 
 ## Usage in Proxy
 
-```typescript
-import { handleHttpsConnect } from './proxy/https-intercept';
-
-server.on('connect', (req, socket, head) => {
-  handleHttpsConnect(req, socket, head, {
-    onRequest: (req, socket, head, hostname, port) => {
-      console.log(`HTTPS: ${hostname}:${port}`);
-    },
-    onResponse: (res, req, socket, head) => {
-      console.log(`Response from ${hostname}`);
-    }
-  });
-});
-```
+MITM logic is integrated directly into the ProxyServer class. See `packages/sdk/src/proxy-server.ts` → `handleHttpsConnect()`.
 
 ## Setup Instructions
 
@@ -104,7 +91,7 @@ For other languages (Python, Ruby, etc.), configure their respective trust store
 ## Files
 
 - `src/cert-manager.ts` - CA generation and certificate signing
-- `src/proxy/https-intercept.ts` - CONNECT tunneling and MITM logic
+- `packages/sdk/src/proxy-server.ts` - CONNECT tunneling and MITM logic (handleHttpsConnect)
 - `src/utils/trust-store.ts` - Node.js trust configuration
 - `src/scripts/setup-trust.ts` - CLI for setup tasks
 - `src/types.d.ts` - TypeScript declarations for node-forge

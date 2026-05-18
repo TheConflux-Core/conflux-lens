@@ -73,10 +73,11 @@
           <span class="count" id="requestCount">0</span>
         </div>
         <div class="request-list" id="requestList">
-          <div class="empty-state">
-            <p>⏳ Waiting for requests: Breakpoints, HAR, Replay...</p>
-            <small>Configure your AI agent to use proxy localhost:9876</small>
-          </div>
+        <div class="empty-state">
+          <p>⏳ Waiting for traffic...</p>
+          <small>Configure your AI agent to use proxy <code>localhost:9876</code></small>
+          <small style="margin-top:4px;display:block">Set breakpoints to intercept requests | HAR export available</small>
+        </div>
         </div>
       </div>
 
@@ -122,7 +123,7 @@
   <div class="modal" id="breakpointActionModal" style="display:none">
     <div class="modal-content modal-large">
       <div class="modal-header">
-        <h2>⏸ Breakpoint Hit: <span id="bpActionType">request</span></h2>
+        <h2>⏸ Intercepted: <span id="bpActionType">Request</span></h2>
         <button class="modal-close" id="closeBpAction">×</button>
       </div>
       <div class="modal-body" id="breakpointActionBody">
