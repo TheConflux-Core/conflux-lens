@@ -276,10 +276,10 @@ function Configure-Environment {
     } else {
         $profileLines = @(
             "`n# Conflux Lens -- HTTPS CA cert for MITM interception"
-            '${env:NODE_EXTRA_CA_CERTS} = "' + $CA_PATH + '"'
+            "`n`${env:NODE_EXTRA_CA_CERTS} = `"$CA_PATH`""
             "`n# Conflux Lens -- Proxy for AI agent traffic inspection"
-            '${env:HTTP_PROXY}  = "http://localhost:9876"'
-            '${env:HTTPS_PROXY} = "http://localhost:9876"'
+            "`n`${env:HTTP_PROXY}  = `"http://localhost:9876`""
+            "`n`${env:HTTPS_PROXY} = `"http://localhost:9876`""
         )
         Add-Content -Path $profilePath -Value $profileLines -NoNewline
         Write-Ok "Added Conflux Lens env vars to profile: $profilePath"
