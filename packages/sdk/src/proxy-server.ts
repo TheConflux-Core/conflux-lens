@@ -155,6 +155,8 @@ export class ProxyServer {
               ? combined.toString('utf8').substring(0, 50000) + '... [truncated]'
               : combined.toString('utf8');
             request.bodySize = combined.length;
+            // Re-broadcast with body data
+            this.updateExchange(exchangeId, { request });
           }
         });
       }
@@ -251,9 +253,10 @@ export class ProxyServer {
         // Buffer for capturing HTTP request data over TLS
         let requestBuf = '';
         let responseBuf = '';
-        let requestCaptured = false;
-        let responseCaptured = false;
-        let responseMetadataSaved = false;
+        let requestHeadersParsed = false;
+        let responseHeadersParsed = false;
+        let requestHeaderEnd = -1;
+        let responseHeaderEnd = -1;
 
         // Log request data for capture/exchange
         clientTlsSocket.on('data', (chunk: Buffer) => {
@@ -261,11 +264,11 @@ export class ProxyServer {
             requestBuf += chunk.toString('utf8');
             // Check if this looks like an HTTP request
             const httpMethodMatch = requestBuf.match(/^(GET|POST|PUT|DELETE|PATCH|HEAD) /);
-            if (httpMethodMatch && !requestCaptured) {
-              requestCaptured = true;
+            if (httpMethodMatch && !requestHeadersParsed) {
               // Find end of headers
-              const headerEnd = requestBuf.indexOf('\r\n\r\n');
-              if (headerEnd === -1) return; // Wait for more data
+              requestHeaderEnd = requestBuf.indexOf('\r\n\r\n');
+              if (requestHeaderEnd === -1) return; // Wait for more data
+              requestHeadersParsed = true;
 
               // Parse the request line
               const firstLine = requestBuf.split('\r\n')[0];
@@ -277,7 +280,7 @@ export class ProxyServer {
               const url = `https://${hostname}${path}`;
 
               // Parse headers
-              const headerSection = requestBuf.substring(0, headerEnd);
+              const headerSection = requestBuf.substring(0, requestHeaderEnd);
               const headerLines = headerSection.split('\r\n').slice(1);
               const headers: Record<string, string> = {};
               for (const line of headerLines) {
@@ -288,7 +291,8 @@ export class ProxyServer {
               }
 
               // Body starts after headers
-              const bodyStart = headerEnd + 4;
+              const bodyStart = requestHeaderEnd + 4;
+              const body = requestBuf.substring(bodyStart);
               const request: CapturedRequest = {
                 id: exchangeId,
                 timestamp: Date.now(),
@@ -298,11 +302,19 @@ export class ProxyServer {
                 host: hostname,
                 path,
                 headers,
-                body: requestBuf.substring(bodyStart) || undefined,
-                bodySize: requestBuf.length - bodyStart || 0,
+                body: body || undefined,
+                bodySize: body.length || 0,
               };
               exchange.request = request;
               this.updateExchange(exchangeId, { request });
+            } else if (requestHeadersParsed && requestHeaderEnd >= 0) {
+              // Update request body as more data arrives
+              const body = requestBuf.substring(requestHeaderEnd + 4);
+              if (body) {
+                exchange.request.body = body.length > 50000 ? body.substring(0, 50000) + '... [truncated]' : body;
+                exchange.request.bodySize = body.length;
+                this.updateExchange(exchangeId, { request: exchange.request });
+              }
             }
           } catch (e) {
             // Ignore parse errors
@@ -313,11 +325,12 @@ export class ProxyServer {
         upstreamTls.on('data', (chunk: Buffer) => {
           try {
             responseBuf += chunk.toString('utf8');
-            if (responseBuf.startsWith('HTTP/') && !responseCaptured) {
+            if (responseBuf.startsWith('HTTP/') && !responseHeadersParsed) {
               const headerEnd = responseBuf.indexOf('\r\n\r\n');
               if (headerEnd === -1) return; // Wait for more data
 
-              responseCaptured = true;
+              responseHeadersParsed = true;
+              responseHeaderEnd = headerEnd;
               const firstLine = responseBuf.split('\r\n')[0];
               const match = firstLine.match(/HTTP\/\d\.\d (\d+) (.*)/);
               if (match) {
@@ -349,6 +362,14 @@ export class ProxyServer {
                   timestamp: Date.now(),
                 };
                 this.updateExchange(exchangeId, { response });
+              }
+            } else if (responseHeadersParsed && responseHeaderEnd >= 0) {
+              // Update response body as more data arrives
+              const body = responseBuf.substring(responseHeaderEnd + 4);
+              if (body && exchange.response) {
+                exchange.response.body = body.length > 50000 ? body.substring(0, 50000) + '... [truncated]' : body;
+                exchange.response.bodySize = body.length;
+                this.updateExchange(exchangeId, { response: exchange.response });
               }
             }
           } catch (e) {
