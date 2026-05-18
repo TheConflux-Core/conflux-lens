@@ -259,7 +259,7 @@ function Configure-Environment {
     }
 
     # --- Auto-configure profile ---
-    $profilePath = $PROFILE.CurrentUserAllHosts
+    $profilePath = $PROFILE
     $profileDir = Split-Path $profilePath -Parent
 
     if (-not (Test-Path $profileDir)) {
