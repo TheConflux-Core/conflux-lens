@@ -93,8 +93,8 @@ export class ProxyServer {
         proxyRes.on('end', () => {
           if (chunks.length > 0) {
             const combined = Buffer.concat(chunks);
-            response.body = combined.length > 50000
-              ? combined.toString('utf8').substring(0, 50000) + '... [truncated]'
+            response.body = combined.length > 100000
+              ? combined.toString('utf8').substring(0, 100000) + '... [truncated]'
               : combined.toString('utf8');
             response.bodySize = combined.length;
           }
@@ -151,8 +151,8 @@ export class ProxyServer {
         req.on('end', () => {
           if (chunks.length > 0) {
             const combined = Buffer.concat(chunks);
-            request.body = combined.length > 50000
-              ? combined.toString('utf8').substring(0, 50000) + '... [truncated]'
+            request.body = combined.length > 100000
+              ? combined.toString('utf8').substring(0, 100000) + '... [truncated]'
               : combined.toString('utf8');
             request.bodySize = combined.length;
             // Re-broadcast with body data
@@ -311,7 +311,7 @@ export class ProxyServer {
               // Update request body as more data arrives
               const body = requestBuf.substring(requestHeaderEnd + 4);
               if (body) {
-                exchange.request.body = body.length > 50000 ? body.substring(0, 50000) + '... [truncated]' : body;
+                exchange.request.body = body.length > 100000 ? body.substring(0, 100000) + '... [truncated]' : body;
                 exchange.request.bodySize = body.length;
                 this.updateExchange(exchangeId, { request: exchange.request });
               }
@@ -356,7 +356,7 @@ export class ProxyServer {
                   statusCode,
                   statusMessage,
                   headers,
-                  body: body.length > 50000 ? body.substring(0, 50000) + '... [truncated]' : body,
+                  body: body.length > 100000 ? body.substring(0, 100000) + '... [truncated]' : body,
                   bodySize: body.length,
                   duration: Date.now() - exchange.request.timestamp,
                   timestamp: Date.now(),
@@ -367,7 +367,7 @@ export class ProxyServer {
               // Update response body as more data arrives
               const body = responseBuf.substring(responseHeaderEnd + 4);
               if (body && exchange.response) {
-                exchange.response.body = body.length > 50000 ? body.substring(0, 50000) + '... [truncated]' : body;
+                exchange.response.body = body.length > 100000 ? body.substring(0, 100000) + '... [truncated]' : body;
                 exchange.response.bodySize = body.length;
                 this.updateExchange(exchangeId, { response: exchange.response });
               }
