@@ -33,6 +33,7 @@ export class ProxyServer {
   private exchanges = new Map<string, CapturedExchange>();
   private breakpoints = new Map<string, Breakpoint>();
   private pendingRequests = new Map<string, { resolve: Function; reject: Function; data: any }>();
+  private pendingConnects = new Map<string, CapturedExchange>();
   private nextId = 1;
   private tlsServers = new Map<string, net.Server>();
 
@@ -70,6 +71,7 @@ export class ProxyServer {
       const startTime = (req as any)._startTime as number;
       const duration = Date.now() - startTime;
 
+      // Always create the response with metadata, even without body
       const response: CapturedResponse = {
         statusCode: proxyRes.statusCode || 0,
         statusMessage: proxyRes.statusMessage || '',
@@ -80,6 +82,10 @@ export class ProxyServer {
         timestamp: Date.now(),
       };
 
+      // Save response metadata immediately (status, headers, timing)
+      this.updateExchange(exchangeId, { response });
+
+      // Then try to capture body for text/json content types
       if (proxyRes.headers['content-type']?.includes('application/json') ||
           proxyRes.headers['content-type']?.includes('text/')) {
         const chunks: Buffer[] = [];
@@ -92,6 +98,7 @@ export class ProxyServer {
               : combined.toString('utf8');
             response.bodySize = combined.length;
           }
+          // Re-broadcast with body data
           this.updateExchange(exchangeId, { response });
         });
       }
@@ -198,8 +205,8 @@ export class ProxyServer {
       isHttps: true,
     };
 
-    this.exchanges.set(exchangeId, exchange);
-    this.broadcastExchange(exchange);
+    // Don't broadcast CONNECT tunnel exchange yet - wait for actual HTTP data
+    this.updatePendingConnect(exchangeId, exchange);
 
     // CRITICAL: This is where MITM HTTPS interception happens.
     // After 200 Connection Established, the client will start a TLS handshake
@@ -241,44 +248,105 @@ export class ProxyServer {
         // Pipe upstream -> client (decrypted by upstreamTls, re-encrypted by clientTlsSocket)
         upstreamTls.pipe(clientTlsSocket);
         
+        // Buffer for capturing HTTP request data over TLS
+        let requestBuf = '';
+        let responseBuf = '';
+        let requestCaptured = false;
+        let responseCaptured = false;
+        let responseMetadataSaved = false;
+
         // Log request data for capture/exchange
         clientTlsSocket.on('data', (chunk: Buffer) => {
           try {
-            const data = chunk.toString('utf8');
-            // Check if this looks like HTTP request
-            if (data.startsWith('GET ') || data.startsWith('POST ') || data.startsWith('PUT ') || 
-                data.startsWith('DELETE ') || data.startsWith('PATCH ') || data.startsWith('HEAD ')) {
-              // Update exchange with request data
-              const capturedRequest: CapturedRequest = {
-                ...exchange.request,
-                body: data.length > 50000 ? data.substring(0, 50000) + '... [truncated]' : data,
-                bodySize: data.length,
+            requestBuf += chunk.toString('utf8');
+            // Check if this looks like an HTTP request
+            const httpMethodMatch = requestBuf.match(/^(GET|POST|PUT|DELETE|PATCH|HEAD) /);
+            if (httpMethodMatch && !requestCaptured) {
+              requestCaptured = true;
+              // Find end of headers
+              const headerEnd = requestBuf.indexOf('\r\n\r\n');
+              if (headerEnd === -1) return; // Wait for more data
+
+              // Parse the request line
+              const firstLine = requestBuf.split('\r\n')[0];
+              const parts = firstLine.split(' ');
+              const method = parts[0] || 'GET';
+              const path = parts[1] || '/';
+
+              // Determine URL
+              const url = `https://${hostname}${path}`;
+
+              // Parse headers
+              const headerSection = requestBuf.substring(0, headerEnd);
+              const headerLines = headerSection.split('\r\n').slice(1);
+              const headers: Record<string, string> = {};
+              for (const line of headerLines) {
+                const colonIdx = line.indexOf(':');
+                if (colonIdx > 0) {
+                  headers[line.substring(0, colonIdx).toLowerCase()] = line.substring(colonIdx + 1).trim();
+                }
+              }
+
+              // Body starts after headers
+              const bodyStart = headerEnd + 4;
+              const request: CapturedRequest = {
+                id: exchangeId,
+                timestamp: Date.now(),
+                method,
+                url,
+                protocol: 'HTTPS',
+                host: hostname,
+                path,
+                headers,
+                body: requestBuf.substring(bodyStart) || undefined,
+                bodySize: requestBuf.length - bodyStart || 0,
               };
-              exchange.request = capturedRequest;
-              this.updateExchange(exchangeId, { request: capturedRequest });
+              exchange.request = request;
+              this.updateExchange(exchangeId, { request });
             }
           } catch (e) {
             // Ignore parse errors
           }
         });
-        
+
         // Log response data
         upstreamTls.on('data', (chunk: Buffer) => {
           try {
-            const data = chunk.toString('utf8');
-            if (data.startsWith('HTTP/')) {
-              const firstLine = data.split('\r\n')[0];
+            responseBuf += chunk.toString('utf8');
+            if (responseBuf.startsWith('HTTP/') && !responseCaptured) {
+              const headerEnd = responseBuf.indexOf('\r\n\r\n');
+              if (headerEnd === -1) return; // Wait for more data
+
+              responseCaptured = true;
+              const firstLine = responseBuf.split('\r\n')[0];
               const match = firstLine.match(/HTTP\/\d\.\d (\d+) (.*)/);
               if (match) {
                 const statusCode = parseInt(match[1], 10);
+                const statusMessage = match[2];
+
+                // Parse headers
+                const headerSection = responseBuf.substring(0, headerEnd);
+                const headerLines = headerSection.split('\r\n').slice(1);
+                const headers: Record<string, string> = {};
+                for (const line of headerLines) {
+                  const colonIdx = line.indexOf(':');
+                  if (colonIdx > 0) {
+                    headers[line.substring(0, colonIdx).toLowerCase()] = line.substring(colonIdx + 1).trim();
+                  }
+                }
+
+                // Body starts after headers
+                const bodyStart = headerEnd + 4;
+                const body = responseBuf.substring(bodyStart);
+
                 const response: CapturedResponse = {
                   statusCode,
-                  statusMessage: match[2],
-                  headers: {},
+                  statusMessage,
+                  headers,
+                  body: body.length > 50000 ? body.substring(0, 50000) + '... [truncated]' : body,
+                  bodySize: body.length,
                   duration: Date.now() - exchange.request.timestamp,
                   timestamp: Date.now(),
-                  body: data.length > 50000 ? data.substring(0, 50000) + '... [truncated]' : data,
-                  bodySize: data.length,
                 };
                 this.updateExchange(exchangeId, { response });
               }
@@ -366,8 +434,23 @@ export class ProxyServer {
     }
   }
 
+  private updatePendingConnect(id: string, exchange: CapturedExchange): void {
+    // Store without broadcasting - will be promoted when real HTTP data is captured
+    this.pendingConnects.set(id, exchange);
+  }
+
   private updateExchange(id: string, update: Partial<CapturedExchange>): void {
-    const exchange = this.exchanges.get(id);
+    let exchange = this.exchanges.get(id);
+    // If not in exchanges, check pendingConnects and promote it
+    if (!exchange) {
+      exchange = this.pendingConnects.get(id);
+      if (exchange) {
+        this.pendingConnects.delete(id);
+        this.exchanges.set(id, exchange);
+        // First broadcast - listener gets initial state
+        this.broadcastExchange(exchange);
+      }
+    }
     if (exchange) {
       Object.assign(exchange, update);
       this.exchanges.set(id, exchange);
