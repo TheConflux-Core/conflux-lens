@@ -48,14 +48,6 @@ function Write-Banner {
     Write-Host ""
 }
 
-function Confirm-YesNo {
-    param([string]$Prompt, [string]$Default = "y")
-    $suffix = if ($Default -eq "y") { "[Y/n]" } else { "[y/N]" }
-    $response = Read-Host "  ? $Prompt $suffix"
-    if ([string]::IsNullOrWhiteSpace($response)) { return $Default -eq "y" }
-    return $response -match '^(y|yes)$'
-}
-
 # --- Prerequisites -----------------------------------------------------------
 function Test-Prerequisites {
     Write-SubHeader "[?] Prerequisites"
@@ -266,48 +258,32 @@ function Configure-Environment {
         return
     }
 
-    Write-Host ""
-    Write-Info "To use Conflux Lens, set these environment variables:"
-    Write-Host ""
-    Write-Host "    `$env:NODE_EXTRA_CA_CERTS = `"$CA_PATH`"" -ForegroundColor White
-    Write-Host "    `$env:HTTP_PROXY          = `"http://localhost:9876`"" -ForegroundColor White
-    Write-Host "    `$env:HTTPS_PROXY         = `"http://localhost:9876`"" -ForegroundColor White
-    Write-Host ""
+    # --- Auto-configure profile ---
+    $profilePath = $PROFILE.CurrentUserAllHosts
+    $profileDir = Split-Path $profilePath -Parent
 
-    if (Confirm-YesNo "Add these to your PowerShell profile (permanent)?" "y") {
-        $profilePath = $PROFILE.CurrentUserAllHosts
-        $profileDir = Split-Path $profilePath -Parent
+    if (-not (Test-Path $profileDir)) {
+        New-Item -Path $profileDir -ItemType Directory -Force | Out-Null
+    }
 
-        if (-not (Test-Path $profileDir)) {
-            New-Item -Path $profileDir -ItemType Directory -Force | Out-Null
-        }
-
-        # Check if already configured
-        $content = ""
-        if (Test-Path $profilePath) {
-            $content = Get-Content $profilePath -Raw
-        }
-        if ($content -match "NODE_EXTRA_CA_CERTS.*conflux-lens") {
-            Write-Ok "Already configured in profile: $profilePath"
-        } else {
-            $profileLines = @(
-                "`n# Conflux Lens -- HTTPS CA cert for MITM interception"
-                '${env:NODE_EXTRA_CA_CERTS} = "' + $CA_PATH + '"'
-                "`n# Conflux Lens -- Proxy for AI agent traffic inspection"
-                '${env:HTTP_PROXY}  = "http://localhost:9876"'
-                '${env:HTTPS_PROXY} = "http://localhost:9876"'
-            )
-            Add-Content -Path $profilePath -Value $profileLines -NoNewline
-            Write-Ok "Added to profile: $profilePath"
-            Write-Info "Restart PowerShell or run:  . `$PROFILE"
-        }
+    # Check if already configured
+    $content = ""
+    if (Test-Path $profilePath) {
+        $content = Get-Content $profilePath -Raw
+    }
+    if ($content -match "NODE_EXTRA_CA_CERTS.*conflux-lens") {
+        Write-Ok "Already configured in profile: $profilePath"
     } else {
-        Write-Info "For current session only, run these in your terminal:"
-        Write-Host ""
-        Write-Host "    `$env:NODE_EXTRA_CA_CERTS = `"$CA_PATH`"" -ForegroundColor White
-        Write-Host "    `$env:HTTP_PROXY          = `"http://localhost:9876`"" -ForegroundColor White
-        Write-Host "    `$env:HTTPS_PROXY         = `"http://localhost:9876`"" -ForegroundColor White
-        Write-Host ""
+        $profileLines = @(
+            "`n# Conflux Lens -- HTTPS CA cert for MITM interception"
+            '${env:NODE_EXTRA_CA_CERTS} = "' + $CA_PATH + '"'
+            "`n# Conflux Lens -- Proxy for AI agent traffic inspection"
+            '${env:HTTP_PROXY}  = "http://localhost:9876"'
+            '${env:HTTPS_PROXY} = "http://localhost:9876"'
+        )
+        Add-Content -Path $profilePath -Value $profileLines -NoNewline
+        Write-Ok "Added Conflux Lens env vars to profile: $profilePath"
+        Write-Info "Restart PowerShell or run:  . `$PROFILE"
     }
 }
 
@@ -323,17 +299,15 @@ function Show-NextSteps {
   2. Open the dashboard:
      http://localhost:3000
 
-  3. Configure your AI agent to use the proxy:
-     `$env:HTTP_PROXY          = "http://localhost:9876"
-     `$env:HTTPS_PROXY         = "http://localhost:9876"
-     `$env:NODE_EXTRA_CA_CERTS = "$CA_PATH"
+  3. The env vars above are saved to your PowerShell profile.
+     Restart PowerShell to apply them, or run:  . $PROFILE
 
-  4. For browser testing, trust the CA cert:
+  4. Trust the CA cert (optional):
      Import $CA_PATH into your browser's
      certificate authorities (Chrome: chrome://settings/certificates)
      See README for Firefox, Edge, and system-wide setup.
 
-  5. Install the SDK in your project:
+  5. (optional) Install the SDK in your project:
      npm install @conflux/sdk ws
 
 "@ -ForegroundColor Gray
