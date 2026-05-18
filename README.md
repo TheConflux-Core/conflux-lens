@@ -22,6 +22,21 @@ AI agents make HTTP requests to LLM APIs, but you only see the *results*, not th
 
 ---
 
+## One-Line Install 🚀
+
+```bash
+# macOS / Linux
+curl -fsSL https://openclaw.ai/install.sh | bash
+
+# Windows PowerShell
+powershell -c "irm https://openclaw.ai/install.ps1 | iex"
+```
+
+This installs everything: clones the repo, installs deps, builds the project,
+generates HTTPS certificates, and optionally configures your shell profile.
+
+---
+
 ## Quick Start (All Platforms)
 
 ### Prerequisites
