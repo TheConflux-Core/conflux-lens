@@ -6,7 +6,7 @@
     inspecting and debugging AI agent API traffic.
 
     Usage:
-        powershell -c "irm https://openclaw.ai/install.ps1 | iex"
+        powershell -c "irm https://lens.theconflux.com/install.ps1 | iex"
 
     What this script does:
         1. Checks prerequisites (Node 18+, npm, git)
@@ -261,7 +261,7 @@ function Setup-HTTPS {
             Write-Info "Path: $CA_PATH"
         } else {
             Write-Info "Generating HTTPS CA certificate for MITM interception..."
-            $output = npx ts-node src/scripts/setup-trust.ts setup 2>&1
+            $output = npm run setup-trust setup 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Ok "CA certificate generated"
             } else {
@@ -346,7 +346,12 @@ function Show-NextSteps {
      `$env:HTTPS_PROXY         = "http://localhost:9876"
      `$env:NODE_EXTRA_CA_CERTS = "$CA_PATH"
 
-  4. Install the SDK in your project:
+  4. For browser testing, trust the CA cert:
+     Import $CA_PATH into your browser's
+     certificate authorities (Chrome: chrome://settings/certificates)
+     See README for Firefox, Edge, and system-wide setup.
+
+  5. Install the SDK in your project:
      npm install @conflux/sdk ws
 
 "@ -ForegroundColor Gray

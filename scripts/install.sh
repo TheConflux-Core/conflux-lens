@@ -3,7 +3,7 @@
 #  📦 Conflux Lens — One-Line Installer
 #
 #  Usage:
-#    curl -fsSL https://openclaw.ai/install.sh | bash
+#    curl -fsSL https://lens.theconflux.com/install.sh | bash
 #
 #  What it does:
 #    1. Checks prerequisites (Node 18+, npm, git)
@@ -46,7 +46,7 @@ prompt_yn() {
     else
         prompt="$prompt [y/N] "
     fi
-    read -r -p "$(printf "${YELLOW}  ?${NC} ${prompt}")" yn
+    read -r -p "$(printf "${YELLOW}  ?${NC} ${prompt}")" yn </dev/tty
     case "$yn" in
         [Yy]|[Yy][Ee][Ss]) return 0 ;;
         [Nn]|[Nn][Oo])     return 1 ;;
@@ -88,7 +88,7 @@ check_not_root() {
         warn "Conflux Lens runs as a regular user — no root needed."
         if ! prompt_yn "Continue anyway?" "n"; then
             echo ""
-            info "Run without sudo:  curl -fsSL https://openclaw.ai/install.sh | bash"
+            info "Run without sudo:  curl -fsSL https://lens.theconflux.com/install.sh | bash"
             exit 1
         fi
     fi
@@ -245,7 +245,7 @@ setup_ca() {
         ok "HTTPS CA certificate already exists"
     else
         info "Generating HTTPS CA certificate for MITM interception..."
-        npx ts-node src/scripts/setup-trust.ts setup 2>&1 || {
+        npm run setup-trust setup 2>&1 || {
             warn "Could not generate CA cert automatically"
             info "You can set it up later: cd $INSTALL_DIR && npm run setup-trust setup"
             return
@@ -339,7 +339,12 @@ show_next_steps() {
      HTTPS_PROXY=http://localhost:9876
      NODE_EXTRA_CA_CERTS=$HOME/.conflux-lens/ca.pem
 
-  4. Install the SDK in your project:
+  4. For browser testing, trust the CA cert:
+     Import ~/.conflux-lens/ca.pem into your browser's
+     certificate authorities (Chrome: chrome://settings/certificates)
+     See README for Firefox, Edge, macOS, and Windows system-wide setup.
+
+  5. Install the SDK in your project:
      npm install @conflux/sdk ws
 
 NEXT
