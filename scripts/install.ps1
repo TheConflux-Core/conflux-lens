@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-    Conflux Lens — One-Line Installer for Windows
+    Conflux Lens -- One-Line Installer for Windows
 .DESCRIPTION
-    Downloads and installs Conflux Lens — an LLM-aware HTTP proxy for
+    Downloads and installs Conflux Lens -- an LLM-aware HTTP proxy for
     inspecting and debugging AI agent API traffic.
 
     Usage:
@@ -17,52 +17,34 @@
         6. Configures environment variables (session or persistent)
         7. Prints next steps
 
-    Idempotent — safe to re-run. Skips completed steps.
+    Idempotent -- safe to re-run. Skips completed steps.
 .LINK
     https://github.com/TheConflux-Core/conflux-lens
 #>
 
 #requires -Version 5.1
 
-# ─── Configuration ───────────────────────────────────────────────────────────
+# --- Configuration -----------------------------------------------------------
 $REPO_HTTPS = "https://github.com/TheConflux-Core/conflux-lens.git"
 $REPO_SSH   = "git@github.com:TheConflux-Core/conflux-lens.git"
 $INSTALL_DIR = Join-Path $env:USERPROFILE ".conflux-lens"
-$CA_PATH     = Join-Path $env:USERPROFILE ".conflux-lens" "ca.pem"
+$CA_PATH     = Join-Path (Join-Path $env:USERPROFILE ".conflux-lens") "ca.pem"
 $MIN_NODE_MAJOR = 18
 $SCRIPT_VERSION = "0.3.0"
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
-function Write-Info   { Write-Host "  → $args" -ForegroundColor Cyan }
-function Write-Ok     { Write-Host "  ✓ $args" -ForegroundColor Green }
-function Write-Warn   { Write-Host "  ⚠ $args" -ForegroundColor Yellow }
-function Write-Err    { Write-Host "  ✗ $args" -ForegroundColor Red }
-function Write-Header { Write-Host ("═" * 60) -ForegroundColor Blue }
-function Write-SubHeader { Write-Host "`n── $args ─" -ForegroundColor Magenta }
+# --- Helpers -----------------------------------------------------------------
+function Write-Info   { Write-Host "  -> $args" -ForegroundColor Cyan }
+function Write-Ok     { Write-Host "  OK $args" -ForegroundColor Green }
+function Write-Warn   { Write-Host "  !! $args" -ForegroundColor Yellow }
+function Write-Err    { Write-Host "  XX $args" -ForegroundColor Red }
+function Write-Header { Write-Host ("=" * 60) -ForegroundColor Blue }
+function Write-SubHeader { Write-Host "`n--- $args ---" -ForegroundColor Magenta }
 
 function Write-Banner {
-    $banner = @"
-
-    ╔══════════════════════════════════════════════════════╗
-    ║                                                      ║
-    ║   ______            ______               __          ║
-    ║  / ____/___  ____  / __/ /_  ___  __    / /   ___   ║
-    ║ / /   / __ \/ __ \/ /_/ / / / / |/_/   / /   / _ \  ║
-    ║/ /___/ /_/ / / / / __/ / /_/ />  <    / /___/  __/  ║
-    ║\____/\____/_/ /_/_/ /_/\__,_/_/|_|   /_____/\___/   ║
-    ║                                                      ║
-    ║   _      _____ _   _  _____                          ║
-    ║  | |    |  ___| \ | |/  ___|                         ║
-    ║  | |    | |__ |  \| |\ `--.                          ║
-    ║  | |    |  __|| . ` | `--. \                         ║
-    ║  | |____| |___| |\  |/\__/ /                         ║
-    ║  \_____/\____/\_| \_/\____/                          ║
-    ║                                                      ║
-    ╚══════════════════════════════════════════════════════╝
-
-"@
-    Write-Host $banner -ForegroundColor Cyan
-    Write-Host "  LLM-aware HTTP proxy for inspecting AI agent API traffic" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "    Conflux Lens v$SCRIPT_VERSION" -ForegroundColor Cyan
+    Write-Host "    LLM-aware HTTP proxy for AI agent traffic inspection" -ForegroundColor DarkGray
+    Write-Host "    https://github.com/TheConflux-Core/conflux-lens" -ForegroundColor DarkGray
     Write-Host ""
 }
 
@@ -74,9 +56,9 @@ function Confirm-YesNo {
     return $response -match '^(y|yes)$'
 }
 
-# ─── Prerequisites ───────────────────────────────────────────────────────────
+# --- Prerequisites -----------------------------------------------------------
 function Test-Prerequisites {
-    Write-SubHeader "🔍 Prerequisites"
+    Write-SubHeader "[?] Prerequisites"
     $missing = $false
 
     # Node.js
@@ -86,11 +68,11 @@ function Test-Prerequisites {
         if ($major -ge $MIN_NODE_MAJOR) {
             Write-Ok "Node.js $nodeVer"
         } else {
-            Write-Warn "Node.js $nodeVer found — version $MIN_NODE_MAJOR+ required"
+            Write-Warn "Node.js $nodeVer found -- version $MIN_NODE_MAJOR+ required"
             $missing = $true
         }
     } catch {
-        Write-Err "Node.js not found — install from https://nodejs.org (v$MIN_NODE_MAJOR+)"
+        Write-Err "Node.js not found -- install from https://nodejs.org (v$MIN_NODE_MAJOR+)"
         $missing = $true
     }
 
@@ -99,7 +81,7 @@ function Test-Prerequisites {
         $npmVer = npm --version
         Write-Ok "npm $npmVer"
     } catch {
-        Write-Err "npm not found (comes with Node.js — reinstall if missing)"
+        Write-Err "npm not found (comes with Node.js -- reinstall if missing)"
         $missing = $true
     }
 
@@ -108,7 +90,7 @@ function Test-Prerequisites {
         $gitVer = git --version
         Write-Ok "Git $gitVer"
     } catch {
-        Write-Warn "Git not found — will use ZIP download instead"
+        Write-Warn "Git not found -- will use ZIP download instead"
         Write-Warn "Install Git for Windows: https://git-scm.com/download/win"
     }
 
@@ -122,9 +104,9 @@ function Test-Prerequisites {
     }
 }
 
-# ─── Clone / Download ────────────────────────────────────────────────────────
+# --- Clone / Download --------------------------------------------------------
 function Install-Repository {
-    Write-SubHeader "📥 Download"
+    Write-SubHeader "[?] Download"
 
     if (Test-Path $INSTALL_DIR) {
         Write-Ok "Conflux Lens already cloned at $INSTALL_DIR"
@@ -153,11 +135,11 @@ function Install-Repository {
             $cloned = $true
         }
     } catch {
-        # git not available — fall through to ZIP
+        # git not available -- fall through to ZIP
     }
 
     if (-not $cloned) {
-        Write-Warn "Git clone failed — downloading ZIP..."
+        Write-Warn "Git clone failed -- downloading ZIP..."
         $zipUrl = "https://github.com/TheConflux-Core/conflux-lens/archive/refs/heads/main.zip"
         $zipPath = Join-Path $env:TEMP "conflux-lens.zip"
         $extractPath = Join-Path $env:TEMP "conflux-lens-extract"
@@ -185,9 +167,9 @@ function Install-Repository {
     }
 }
 
-# ─── Install Dependencies ────────────────────────────────────────────────────
+# --- Install Dependencies ----------------------------------------------------
 function Install-Dependencies {
-    Write-SubHeader "📦 Install Dependencies"
+    Write-SubHeader "[?] Install Dependencies"
     Push-Location $INSTALL_DIR
 
     try {
@@ -200,7 +182,7 @@ function Install-Dependencies {
                 $lockTime = (Get-Item $lockFile).LastWriteTime
                 $modulesTime = (Get-Item $modulesPath).LastWriteTime
                 if ($lockTime -gt $modulesTime) {
-                    Write-Info "Dependencies out of date — updating..."
+                    Write-Info "Dependencies out of date -- updating..."
                     npm install 2>&1 | Select-Object -Last 3
                     Write-Ok "Dependencies updated"
                 }
@@ -222,13 +204,13 @@ function Install-Dependencies {
     }
 }
 
-# ─── Build ────────────────────────────────────────────────────────────────────
+# --- Build --------------------------------------------------------------------
 function Build-Project {
-    Write-SubHeader "🔨 Build"
+    Write-SubHeader "[?] Build"
     Push-Location $INSTALL_DIR
 
     try {
-        $distIndex = Join-Path $INSTALL_DIR "dist" "index.js"
+        $distIndex = Join-Path (Join-Path $INSTALL_DIR "dist") "index.js"
         if ((Test-Path $distIndex)) {
             Write-Ok "Project already built"
             Write-Info "Refreshing build..."
@@ -250,9 +232,9 @@ function Build-Project {
     }
 }
 
-# ─── HTTPS Certificate ───────────────────────────────────────────────────────
+# --- HTTPS Certificate -------------------------------------------------------
 function Setup-HTTPS {
-    Write-SubHeader "🔐 HTTPS Interception Setup"
+    Write-SubHeader "[?] HTTPS Interception Setup"
     Push-Location $INSTALL_DIR
 
     try {
@@ -275,12 +257,12 @@ function Setup-HTTPS {
     }
 }
 
-# ─── Environment Configuration ───────────────────────────────────────────────
+# --- Environment Configuration -----------------------------------------------
 function Configure-Environment {
-    Write-SubHeader "⚙️  Environment Configuration"
+    Write-SubHeader "#  Environment Configuration"
 
     if (-not (Test-Path $CA_PATH)) {
-        Write-Warn "CA certificate not found — skipping environment config"
+        Write-Warn "CA certificate not found -- skipping environment config"
         return
     }
 
@@ -309,9 +291,9 @@ function Configure-Environment {
             Write-Ok "Already configured in profile: $profilePath"
         } else {
             $profileLines = @(
-                "`n# Conflux Lens — HTTPS CA cert for MITM interception"
+                "`n# Conflux Lens -- HTTPS CA cert for MITM interception"
                 '${env:NODE_EXTRA_CA_CERTS} = "' + $CA_PATH + '"'
-                "`n# Conflux Lens — Proxy for AI agent traffic inspection"
+                "`n# Conflux Lens -- Proxy for AI agent traffic inspection"
                 '${env:HTTP_PROXY}  = "http://localhost:9876"'
                 '${env:HTTPS_PROXY} = "http://localhost:9876"'
             )
@@ -329,9 +311,9 @@ function Configure-Environment {
     }
 }
 
-# ─── Next Steps ──────────────────────────────────────────────────────────────
+# --- Next Steps --------------------------------------------------------------
 function Show-NextSteps {
-    Write-SubHeader "🎯 Next Steps"
+    Write-SubHeader "[?] Next Steps"
     Write-Host @"
 
   1. Start the proxy:
@@ -357,52 +339,52 @@ function Show-NextSteps {
 "@ -ForegroundColor Gray
 }
 
-# ─── Main ────────────────────────────────────────────────────────────────────
+# --- Main --------------------------------------------------------------------
 function Main {
     Clear-Host
 
-    # ── Banner ──
+    # -- Banner --
     Write-Banner
-    Write-Host "  ℹ  Conflux Lens v$SCRIPT_VERSION — One-Line Installer" -ForegroundColor White
+    Write-Host "  i  Conflux Lens v$SCRIPT_VERSION -- One-Line Installer" -ForegroundColor White
     Write-Host "     https://github.com/TheConflux-Core/conflux-lens" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "  About: LLM-aware HTTP proxy for inspecting AI agent API traffic." -ForegroundColor Yellow
     Write-Host "         Monitor requests, responses, tokens, costs, tool calls & streams." -ForegroundColor Yellow
 
-    # ── Stage 1: Prerequisites ──
+    # -- Stage 1: Prerequisites --
     Test-Prerequisites
 
-    # ── Stage 2: Clone ──
+    # -- Stage 2: Clone --
     Install-Repository
 
-    # ── Stage 3: Install Dependencies ──
+    # -- Stage 3: Install Dependencies --
     Install-Dependencies
 
-    # ── Stage 4: Build ──
+    # -- Stage 4: Build --
     Build-Project
 
-    # ── Stage 5: HTTPS CA ──
+    # -- Stage 5: HTTPS CA --
     Setup-HTTPS
 
-    # ── Stage 6: Environment Config ──
+    # -- Stage 6: Environment Config --
     Configure-Environment
 
-    # ── Complete ──
+    # -- Complete --
     Write-Header
-    Write-Host "  ✅ Conflux Lens installed successfully!" -ForegroundColor Green
+    Write-Host "  [OK] Conflux Lens installed successfully!" -ForegroundColor Green
     Write-Header
 
     Show-NextSteps
 
     # Final check
-    $distIndex = Join-Path $INSTALL_DIR "dist" "index.js"
+    $distIndex = Join-Path (Join-Path $INSTALL_DIR "dist") "index.js"
     if (Test-Path $distIndex) {
         Write-Ok "Ready to launch! Run:  cd $INSTALL_DIR && npm start"
     } else {
-        Write-Warn "Build output not found — try:  cd $INSTALL_DIR && npm run build && npm start"
+        Write-Warn "Build output not found -- try:  cd $INSTALL_DIR && npm run build && npm start"
     }
     Write-Host ""
 }
 
-# ─── Execute ─────────────────────────────────────────────────────────────────
+# --- Execute -----------------------------------------------------------------
 Main
