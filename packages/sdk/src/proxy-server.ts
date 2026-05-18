@@ -350,14 +350,18 @@ export class ProxyServer {
 
                 // Body starts after headers
                 const bodyStart = headerEnd + 4;
-                const body = responseBuf.substring(bodyStart);
+                const rawBody = responseBuf.substring(bodyStart);
+
+                // Decode chunked transfer encoding if needed
+                const isChunked = headers['transfer-encoding']?.toLowerCase().includes('chunked');
+                const decodedBody = isChunked ? this.decodeChunkedBody(rawBody) : rawBody;
 
                 const response: CapturedResponse = {
                   statusCode,
                   statusMessage,
                   headers,
-                  body: body.length > 100000 ? body.substring(0, 100000) + '... [truncated]' : body,
-                  bodySize: body.length,
+                  body: decodedBody.length > 100000 ? decodedBody.substring(0, 100000) + '... [truncated]' : decodedBody,
+                  bodySize: decodedBody.length,
                   duration: Date.now() - exchange.request.timestamp,
                   timestamp: Date.now(),
                 };
@@ -365,10 +369,12 @@ export class ProxyServer {
               }
             } else if (responseHeadersParsed && responseHeaderEnd >= 0) {
               // Update response body as more data arrives
-              const body = responseBuf.substring(responseHeaderEnd + 4);
-              if (body && exchange.response) {
-                exchange.response.body = body.length > 100000 ? body.substring(0, 100000) + '... [truncated]' : body;
-                exchange.response.bodySize = body.length;
+              const rawBody = responseBuf.substring(responseHeaderEnd + 4);
+              if (rawBody && exchange.response) {
+                const isChunked = exchange.response.headers['transfer-encoding']?.toString().toLowerCase().includes('chunked');
+                const decodedBody = isChunked ? this.decodeChunkedBody(rawBody) : rawBody;
+                exchange.response.body = decodedBody.length > 100000 ? decodedBody.substring(0, 100000) + '... [truncated]' : decodedBody;
+                exchange.response.bodySize = decodedBody.length;
                 this.updateExchange(exchangeId, { response: exchange.response });
               }
             }
@@ -444,6 +450,30 @@ export class ProxyServer {
       result[key] = value as string | string[];
     }
     return result;
+  }
+
+  /**
+   * Decode HTTP chunked transfer encoding.
+   * Input: "1a\r\n{...json...}\r\n0\r\n\r\n"
+   * Output: "{...json...}"
+   */
+  private decodeChunkedBody(raw: string): string {
+    let result = '';
+    let pos = 0;
+    while (pos < raw.length) {
+      // Find end of chunk size line
+      const crlf = raw.indexOf('\r\n', pos);
+      if (crlf === -1) break;
+      const sizeHex = raw.substring(pos, crlf).trim();
+      if (!sizeHex) break;
+      const size = parseInt(sizeHex, 16);
+      if (isNaN(size) || size === 0) break; // Last chunk
+      pos = crlf + 2; // Skip CRLF after size
+      if (pos + size > raw.length) break; // Incomplete chunk
+      result += raw.substring(pos, pos + size);
+      pos += size + 2; // Skip CRLF after chunk data
+    }
+    return result || raw; // Fall back to raw if decoding fails
   }
 
   private broadcastExchange(exchange: CapturedExchange): void {
