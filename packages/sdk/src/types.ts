@@ -93,6 +93,8 @@ export interface CapturedResponse {
   bodySize?: number;
   duration: number;
   timestamp: number;
+  /** Parsed WebSocket text/binary messages (from Gateway connections) */
+  websocketMessages?: string[];
 }
 
 export interface CapturedExchange {

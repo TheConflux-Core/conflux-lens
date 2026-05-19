@@ -186,9 +186,7 @@ function createPatchedHttpRequest(original: typeof httpM.request): any {
           (res as any).emit = function (...args: any[]) {
             if (args[0] === 'end' && chunks.length > 0) {
               const combined = Buffer.concat(chunks);
-              response.body = combined.length > getMaxBodySize()
-                ? combined.toString('utf8').substring(0, getMaxBodySize()) + '... [truncated]'
-                : combined.toString('utf8');
+              response.body = combined.toString('utf8');
               response.bodySize = combined.length;
             }
             return originalEmit.apply(this, args as [string | symbol, ...any[]]);
@@ -247,9 +245,7 @@ function createPatchedHttpRequest(original: typeof httpM.request): any {
       } catch (err) {}
 
       if (requestBody.length > 0) {
-        request.body = requestBody.length > 50000
-          ? requestBody.substring(0, 50000) + '... [truncated]'
-          : requestBody;
+        request.body = requestBody;
         request.bodySize = Buffer.byteLength(requestBody);
       }
       return originalEnd.call(this, chunk, encoding, cb);
