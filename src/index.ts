@@ -26,6 +26,7 @@ const DASH_PORT = parseInt(process.env.DASH_PORT || '3000');
 
 const proxyServer = createProxyServer({
   port: PROXY_PORT,
+  host: '0.0.0.0',
   wsPort: WS_PORT,
   logLevel: 'info',
   autoConfigureTrust: false,

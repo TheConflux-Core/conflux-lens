@@ -313,12 +313,14 @@ function extractSseTokenUsage(body) {
 
 function matches(exchange) {
   const req = exchange.request;
-  if (currentFilter === "error" && exchange.response?.statusCode < 400) return false;
+  const res = exchange.response;
+  if (currentFilter === "error" && (!res || res.statusCode < 400)) return false;
   if (currentFilter === "llm") {
     const u = req.url.toLowerCase();
     if (!u.includes("openai") && !u.includes("anthropic") && !u.includes("v1/chat") && !u.includes("v1/completions") && !u.includes("api.anthropic") && !u.includes("googleai") && !u.includes("gemini") && !u.includes("mistral") && !u.includes("cohere") && !u.includes("deepseek") && !u.includes("xai") && !u.includes("minimax")) return false;
   }
   if (currentFilter === "https" && !exchange.isHttps) return false;
+  if (currentFilter === "websocket" && (!res || res.statusCode !== 101)) return false;
   if (searchQuery) {
     const s = JSON.stringify([req.method, req.url, req.body || ""]).toLowerCase();
     if (!s.includes(searchQuery)) return false;
@@ -336,15 +338,18 @@ function renderRequestList() {
   requestList.innerHTML = list.map(ex => {
     const status = ex.response?.statusCode || 0;
     const isErr = status >= 400;
+    const isWs = status === 101;
+    const wsCount = (ex.response?.websocketMessages || []).length;
     const duration = ex.response?.duration || 0;
     const timeStr = duration > 1000 ? (duration/1000).toFixed(1)+"s" : duration+"ms";
     const method = ex.request.method;
     const url = ex.request.url.length > 50 ? ex.request.url.slice(0,47)+"..." : ex.request.url;
-    return `<div class="request-item${selectedId===ex.id?" selected":""}${ex.isHttps?" https":""}" data-id="${ex.id}" onclick="selectRequest('${ex.id}')" ${isErr?'style="border-left:3px solid var(--error)"':''}>
+    const wsBadge = isWs ? `<span class="ws-badge">WS${wsCount > 0 ? ' (' + wsCount + ')' : ''}</span>` : '';
+    return `<div class="request-item${selectedId===ex.id?" selected":""}${ex.isHttps?" https":""}${isWs?" ws-gateway":""}" data-id="${ex.id}" onclick="selectRequest('${ex.id}')" ${isErr?'style="border-left:3px solid var(--error)"':''} ${isWs?'style="border-left:3px solid var(--cyan)"':''}>
       <div class="req-method ${method==="POST"?"post":method==="PUT"?"put":method==="DELETE"?"delete":"get"}">${method}</div>
-      <div class="req-details"><div class="req-url">${escapeHtml(url)}</div>
-      <div class="req-meta">${status ? `Status: ${status} | ` : ""}${timeStr}${ex.isHttps?' | HTTPS':' | HTTP'}</div></div>
-      ${status>=400?`<div class="req-status error">${status}</div>`:`<div class="req-status">${duration?timeStr:""}</div>`}
+      <div class="req-details"><div class="req-url">${escapeHtml(url)}${wsBadge}</div>
+      <div class="req-meta">${status ? `Status: ${status} | ` : ""}${timeStr}${ex.isHttps?' | HTTPS':' | HTTP'}${wsCount > 0 ? ' | ' + wsCount + ' WS messages' : ''}</div></div>
+      ${isWs ? `<div class="req-status ws-indicator">🔌 WS</div>` : (status>=400 ? `<div class="req-status error">${status}</div>` : `<div class="req-status">${duration?timeStr:""}</div>`)}
     </div>`;
   }).join("");
 }
@@ -431,16 +436,20 @@ function renderDetail(id) {
   body += `</div>`;
   body += `</div>`;
 
-  // Tabs
-  body += `<div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px">`;
-  body += `<button class="detail-tab active" onclick="showDetailTab('request',this)">Request</button>`;
-  body += `<button class="detail-tab" onclick="showDetailTab('response',this)">Response</button>`;
-  body += `<button class="detail-tab" onclick="showDetailTab('headers',this)">Headers</button>`;
-  body += `<button class="detail-tab" onclick="showDetailTab('timing',this)">Timing</button>`;
-  body += `<button class="detail-tab" onclick="openReplayModal('${id}')\">↻ Replay</button></div>`;
+  // Tabs — auto-select WebSocket for Gateway exchanges
+  const isWsExchange = res && res.statusCode === 101 && res.websocketMessages && res.websocketMessages.length > 0;
+  body += `<div style=\"display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px\">`;
+  body += `<button class=\"detail-tab${isWsExchange ? '' : ' active'}\" onclick=\"showDetailTab('request',this)\">Request</button>`;
+  body += `<button class=\"detail-tab\" onclick=\"showDetailTab('response',this)\">Response</button>`;
+  body += `<button class=\"detail-tab\" onclick=\"showDetailTab('headers',this)\">Headers</button>`;
+  body += `<button class=\"detail-tab\" onclick=\"showDetailTab('timing',this)\">Timing</button>`;
+  if (isWsExchange) {
+    body += `<button class=\"detail-tab active\" onclick=\"showDetailTab('websocket',this)\">WebSocket (${res.websocketMessages.length})</button>`;
+  }
+  body += `<button class=\"detail-tab\" onclick=\"openReplayModal('${id}')\\\">↻ Replay</button></div>`;
 
-  // Request tab
-  body += `<div class="tab-content" id="req-tab"><div class="code-block"><pre>${prettyPrint(req.body)}</pre></div></div>`;
+  // Request tab — hide initially for Gateway exchanges (shows garbled binary)
+  body += `<div class="tab-content" id="req-tab" style="display:${isWsExchange ? 'none' : 'block'}"><div class="code-block"><pre>${prettyPrint(req.body)}</pre></div></div>`;
 
   // Response tab
   body += `<div class="tab-content" id="res-tab" style="display:none">`;
@@ -473,13 +482,32 @@ function renderDetail(id) {
   if (res) body += `<p><strong>Response Body:</strong> ${res.bodySize || 0} bytes</p>`;
   body += `</div></div>`;
 
+  // WebSocket tab — visible by default for Gateway exchanges
+  body += `<div class="tab-content" id="ws-tab" style="display:${isWsExchange ? 'block' : 'none'}">`;
+  if (res && res.websocketMessages && res.websocketMessages.length > 0) {
+    body += `<div style="margin-bottom:12px;font-size:13px;color:var(--fg-muted)">${res.websocketMessages.length} WebSocket messages</div>`;
+    res.websocketMessages.forEach((msg, i) => {
+      const label = formatWsLabel(msg);
+      body += `<details style="margin-bottom:6px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px" ${i < 5 ? 'open' : ''}>`;
+      body += `<summary style="cursor:pointer;font-weight:600;font-size:12px;margin-bottom:4px;display:flex;align-items:center;gap:8px">`;
+      body += `<span class="ws-msg-badge" style="background:${label.color}20;color:${label.color};padding:2px 8px;border-radius:3px;font-size:11px;font-weight:700">${label.emoji} ${label.text}</span>`;
+      body += `<span style="color:var(--fg-muted);font-weight:400;font-size:11px">#${i}</span>`;
+      body += `</summary>`;
+      body += `<div class="code-block" style="max-height:400px;overflow:auto;margin-top:4px"><pre>${prettyPrint(msg)}</pre></div>`;
+      body += `</details>`;
+    });
+  } else {
+    body += `<p style="color:var(--fg-muted)">No WebSocket messages</p>`;
+  }
+  body += `</div>`;
+
   detailPane.innerHTML = body;
 }
 
 function showDetailTab(tab, btn) {
   document.querySelectorAll(".detail-tab").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
-  ["req","res","hdr","time"].forEach(t => { const el = document.getElementById(t+"-tab"); if (el) el.style.display = "none"; });
+  ["req","res","hdr","time","ws"].forEach(t => { const el = document.getElementById(t+"-tab"); if (el) el.style.display = "none"; });
   const el = document.getElementById(tab+"-tab");
   if (el) el.style.display = "block";
 }
@@ -489,6 +517,57 @@ function formatHeaders(h) {
   if (!h) return out;
   for (const [k,v] of Object.entries(h)) out += `${k}: ${Array.isArray(v)?v.join(", "):v}\n`;
   return out;
+}
+
+/**
+ * Parse a WebSocket Gateway JSON message and return formatted label metadata.
+ */
+function formatWsLabel(msg) {
+  try {
+    const p = typeof msg === 'string' ? JSON.parse(msg) : msg;
+    const op = p.op;
+    const t = p.t || '';
+    
+    // Opcode labels: https://discord.com/developers/docs/topics/gateway#opcodes-and-status-codes
+    const opLabels = {
+      0: { emoji: '📨', color: '#4f46e5', text: t || 'Dispatch' },
+      1: { emoji: '💓', color: '#ef4444', text: 'Heartbeat' },
+      2: { emoji: '🆔', color: '#10b981', text: 'Identify' },
+      3: { emoji: '📍', color: '#f59e0b', text: 'Presence Update' },
+      4: { emoji: '🎤', color: '#f59e0b', text: 'Voice State Update' },
+      7: { emoji: '🔁', color: '#8b5cf6', text: 'Reconnect' },
+      8: { emoji: '🏃', color: '#8b5cf6', text: 'Request Guild Members' },
+      9: { emoji: '❌', color: '#ef4444', text: 'Invalid Session' },
+      10: { emoji: '👋', color: '#22d3ee', text: 'Hello' },
+      11: { emoji: '💚', color: '#34d399', text: 'Heartbeat ACK' },
+    };
+    
+    if (opLabels[op]) return opLabels[op];
+    return { emoji: '📦', color: '#888', text: `op ${op}` };
+  } catch (e) {
+    return { emoji: '❓', color: '#888', text: 'Unknown' };
+  }
+}
+
+/**
+ * Try to decompress gzip/brotli response body for display
+ */
+function tryDecompressBody(body) {
+  if (!body || typeof body !== 'string') return null;
+  // Check for gzip magic bytes: 0x1f 0x8b
+  if (body.charCodeAt(0) === 0x1f && body.charCodeAt(1) === 0x8b) {
+    try {
+      // Use the browser's built-in decompression
+      const compressed = Uint8Array.from(body.split('').map(c => c.charCodeAt(0)));
+      const decompressor = new DecompressionStream('gzip');
+      const readable = new Blob([compressed]).stream().pipeThrough(decompressor);
+      // This is async, so we return the body with a note
+      return null; // Keep showing raw for now - browser can't sync decompress
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
 }
 
 function selectRequest(id) {

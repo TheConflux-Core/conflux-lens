@@ -882,3 +882,44 @@ header {
 .headers-section h4:first-child {
   margin-top: 0;
 }
+
+/* WebSocket Gateway UI */
+.ws-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-left: 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(34,211,238,0.2);
+  color: var(--cyan);
+  vertical-align: middle;
+  letter-spacing: 0.3px;
+}
+
+.request-item.ws-gateway {
+  border-left: 3px solid var(--cyan) !important;
+  background: rgba(34,211,238,0.04);
+}
+
+.request-item.ws-gateway:hover {
+  background: rgba(34,211,238,0.08);
+}
+
+.request-item.ws-gateway.selected {
+  background: rgba(34,211,238,0.12);
+  border-color: var(--cyan);
+}
+
+.req-status.ws-indicator {
+  font-size: 11px;
+  color: var(--cyan);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(34,211,238,0.12);
+}
+
+.ws-msg-badge {
+  white-space: nowrap;
+}

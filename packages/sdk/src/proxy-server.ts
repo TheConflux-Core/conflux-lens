@@ -5,6 +5,7 @@
 
 import http from 'http';
 import * as net from 'net';
+import * as zlib from 'zlib';
 import * as tls from 'tls';
 import * as url from 'url';
 import { WebSocketServer } from 'ws';
@@ -242,14 +243,9 @@ export class ProxyServer {
         port,
         rejectUnauthorized: false,
       }, () => {
-        // Upstream TLS connected - now we can pipe decrypted data
-        
-        // Pipe client -> upstream (decrypted by clientTlsSocket, re-encrypted by upstreamTls)
-        clientTlsSocket.pipe(upstreamTls);
-        
-        // Pipe upstream -> client (decrypted by upstreamTls, re-encrypted by clientTlsSocket)
-        upstreamTls.pipe(clientTlsSocket);
-        
+        // Upstream TLS connected - now we handle decrypted data manually
+        // (NO pipe() — pipe + on('data') conflict causes data loss, especially with binary WS frames)
+
         // Buffer for capturing HTTP request data over TLS
         let requestBuf = '';
         let responseBuf = '';
@@ -257,10 +253,38 @@ export class ProxyServer {
         let responseHeadersParsed = false;
         let requestHeaderEnd = -1;
         let responseHeaderEnd = -1;
+        // WebSocket frame parsing state (for Discord Gateway, etc.)
+        let isWebSocket = false;
+        let wsFrameBuffer = Buffer.alloc(0);
+        const wsMessages: string[] = [];
+        // zlib-stream decompression for Discord Gateway binary frames
+        const wsZlibInflator = new zlib.InflateRaw();
+        let wsZlibBuf = '';
+        const WS_ZLIB_SYNC = '\x00\x00\xff\xff';
+        wsZlibInflator.on('data', (decompressed: Buffer) => {
+          // Each zlib data event = one complete decompressed Gateway message
+          // (Discord's zlib-stream uses Z_SYNC_FLUSH boundaries which are consumed
+          // by the inflator internally — the SYNC_FLUSH marker never appears in output)
+          const text = decompressed.toString('utf8').trim();
+          if (text) {
+            wsMessages.push(text);
+            // Push immediately to exchange (zlib is async)
+            if (exchange.response) {
+              exchange.response.websocketMessages = [...wsMessages];
+              this.updateExchange(exchangeId, { response: exchange.response });
+            }
+          }
+        });
+        wsZlibInflator.on('error', (err: Error) => {
+          this.log('verbose', `zlib inflate error: ${err.message}`);
+        });
 
-        // Log request data for capture/exchange
+        // Log request data for capture/exchange + forward to upstream
         clientTlsSocket.on('data', (chunk: Buffer) => {
           try {
+            // Forward client data to upstream (replaces pipe())
+            upstreamTls.write(chunk);
+            
             requestBuf += chunk.toString('utf8');
             // Check if this looks like an HTTP request
             const httpMethodMatch = requestBuf.match(/^(GET|POST|PUT|DELETE|PATCH|HEAD) /);
@@ -324,6 +348,34 @@ export class ProxyServer {
         // Log response data
         upstreamTls.on('data', (chunk: Buffer) => {
           try {
+            // Forward upstream data to client (replaces pipe())
+            clientTlsSocket.write(chunk);
+            
+            // After 101 Switching Protocols, parse WebSocket frames instead of HTTP
+            if (isWebSocket) {
+              wsFrameBuffer = Buffer.concat([wsFrameBuffer, chunk]);
+              wsFrameBuffer = Buffer.from(this.parseWsFromBuffer(wsFrameBuffer, wsMessages, wsZlibInflator, wsZlibBuf, WS_ZLIB_SYNC));
+
+              // Text frames pushed to wsMessages synchronously — update exchange immediately
+              if (wsMessages.length > 0) {
+                if (!exchange.response) {
+                  exchange.response = {
+                    statusCode: 101,
+                    statusMessage: 'Switching Protocols',
+                    headers: {},
+                    bodySize: 0,
+                    duration: Date.now() - exchange.request.timestamp,
+                    timestamp: Date.now(),
+                    websocketMessages: [...wsMessages],
+                  };
+                } else {
+                  exchange.response.websocketMessages = [...wsMessages];
+                }
+                this.updateExchange(exchangeId, { response: exchange.response });
+              }
+              return;
+            }
+
             responseBuf += chunk.toString('utf8');
             if (responseBuf.startsWith('HTTP/') && !responseHeadersParsed) {
               const headerEnd = responseBuf.indexOf('\r\n\r\n');
@@ -336,6 +388,49 @@ export class ProxyServer {
               if (match) {
                 const statusCode = parseInt(match[1], 10);
                 const statusMessage = match[2];
+
+                // Detect WebSocket upgrade (101 Switching Protocols)
+                if (statusCode === 101) {
+                  isWebSocket = true;
+                  this.log('info', `WebSocket upgrade to ${hostname}:${port}`);
+                  // Parse upgrade response headers
+                  const headerSection = responseBuf.substring(0, responseBuf.indexOf('\r\n\r\n'));
+                  const headerLines = headerSection.split('\r\n').slice(1);
+                  const upgradeHeaders: Record<string, string> = {};
+                  for (const line of headerLines) {
+                    const colonIdx = line.indexOf(':');
+                    if (colonIdx > 0) {
+                      upgradeHeaders[line.substring(0, colonIdx).toLowerCase()] = line.substring(colonIdx + 1).trim();
+                    }
+                  }
+                  exchange.response = {
+                    statusCode,
+                    statusMessage,
+                    headers: upgradeHeaders,
+                    bodySize: 0,
+                    duration: Date.now() - exchange.request.timestamp,
+                    timestamp: Date.now(),
+                    websocketMessages: [],
+                  };
+                  this.updateExchange(exchangeId, { response: exchange.response });
+
+                  // CRITICAL: Handle trailing WS frame data in the same TCP chunk
+                  // The 101 response headers + WS frames can arrive in a single packet
+                  const wsHeaderEnd = responseBuf.indexOf('\r\n\r\n');
+                  const headersByteLen = Buffer.byteLength(responseBuf.substring(0, wsHeaderEnd + 4), 'utf8');
+                  const trailingChunk = chunk.slice(headersByteLen);
+                  if (trailingChunk.length > 0) {
+                    this.log('debug', `Feeding ${trailingChunk.length} trailing WS bytes from initial chunk`);
+                    wsFrameBuffer = Buffer.concat([wsFrameBuffer, trailingChunk]);
+                    wsFrameBuffer = Buffer.from(this.parseWsFromBuffer(wsFrameBuffer, wsMessages, wsZlibInflator, wsZlibBuf, WS_ZLIB_SYNC));
+                    // Update exchange with any parsed messages
+                    if (wsMessages.length > 0) {
+                      exchange.response.websocketMessages = [...wsMessages];
+                      this.updateExchange(exchangeId, { response: exchange.response });
+                    }
+                  }
+                  return;
+                }
 
                 // Parse headers
                 const headerSection = responseBuf.substring(0, headerEnd);
@@ -442,6 +537,73 @@ export class ProxyServer {
 
   getWss(): WebSocketServer {
     return this.wss;
+  }
+
+  /**
+   * Parse RFC 6455 WebSocket frames from a buffer.
+   * Handles text frames (opcode 0x1) and binary frames (opcode 0x2) with zlib-stream decompression.
+   * Partial frames stay in the returned buffer for the next call.
+   */
+  private parseWsFromBuffer(
+    buffer: Buffer,
+    wsMessages: string[],
+    zlibInflator: zlib.InflateRaw,
+    prevBuf: string,
+    SYNC_FLUSH: string
+  ): Buffer {
+    if (buffer.length < 2) return buffer;
+    let offset = 0;
+    while (buffer.length - offset >= 2) {
+      const b1 = buffer[offset];
+      const b2 = buffer[offset + 1];
+      const opcode = b1 & 0x0F;
+      const hasMask = (b2 >> 7) & 1;
+      let payloadLen = b2 & 0x7F;
+      let headerLen = 2;
+      if (payloadLen === 126) {
+        if (buffer.length - offset < 4) break;
+        payloadLen = buffer.readUInt16BE(offset + 2);
+        headerLen += 2;
+      } else if (payloadLen === 127) {
+        if (buffer.length - offset < 10) break;
+        payloadLen = Number(buffer.readBigUInt64BE(offset + 2));
+        headerLen += 8;
+      }
+      let maskLen = 0;
+      if (hasMask) {
+        if (buffer.length - offset < headerLen + 4) break;
+        maskLen = 4;
+      }
+      const frameLen = headerLen + maskLen + payloadLen;
+      if (buffer.length - offset < frameLen) break;
+
+      const rawPayload = Buffer.from(buffer.slice(offset + headerLen + maskLen, offset + frameLen));
+      // Unmask if needed
+      if (hasMask) {
+        const maskKey = buffer.slice(offset + headerLen, offset + headerLen + 4);
+        for (let i = 0; i < rawPayload.length; i++) {
+          rawPayload[i] ^= maskKey[i % 4];
+        }
+      }
+
+      if (opcode === 0x1) {
+        // Text frame
+        const text = rawPayload.toString('utf8');
+        wsMessages.push(text);
+        this.log('debug', `WS-text[${wsMessages.length - 1}]: ${text.substring(0, 200)}`);
+      } else if (opcode === 0x2) {
+        // Binary frame — zlib-stream compressed (Discord Gateway)
+        let binaryData = rawPayload;
+        // Strip optional 2-byte zlib header (0x78 0x9C / 0x78 0xDA)
+        if (binaryData.length >= 2 && binaryData[0] === 0x78 && (binaryData[1] === 0x9C || binaryData[1] === 0xDA)) {
+          binaryData = binaryData.slice(2);
+        }
+        zlibInflator.write(binaryData);
+      }
+
+      offset += frameLen;
+    }
+    return buffer.slice(offset);
   }
 
   private normalizeHeaders(headers: http.IncomingHttpHeaders): Record<string, string | string[]> {
