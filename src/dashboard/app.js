@@ -252,12 +252,71 @@ function prettyPrint(body) {
   return escapeHtml(body);
 }
 
+/**
+ * Extract LLM token usage from SSE (server-sent events) response body
+ * SSE format: "event: message_delta\ndata: {...}\n\n"
+ * The message_delta event contains usage: {input_tokens, output_tokens}
+ */
+function extractSseTokenUsage(body) {
+  if (!body || typeof body !== 'string') return null;
+  
+  // Split into SSE events by double newline
+  const events = body.split('\n\n');
+  
+  // Scan all events: prefer message_delta (final usage), fall back to message_start (initial usage)
+  let finalTokens = null;
+  let initialTokens = null;
+  
+  for (const eventBlock of events) {
+    // message_delta carries final token usage (input + output)
+    if (eventBlock.includes('message_delta') && eventBlock.includes('"usage"')) {
+      const lines = eventBlock.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.usage) {
+              const input = data.usage.input_tokens || data.usage.prompt_tokens || 0;
+              const output = data.usage.output_tokens || data.usage.completion_tokens || 0;
+              if (input > 0 || output > 0) {
+                finalTokens = { prompt: input, completion: output, total: input + output };
+              }
+            }
+          } catch (e) { /* skip unparseable */ }
+        }
+      }
+    }
+    
+    // message_start carries initial usage (input only, output=0)
+    if (eventBlock.includes('message_start') && !finalTokens) {
+      const lines = eventBlock.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.message && data.message.usage) {
+              const u = data.message.usage;
+              const input = u.input_tokens || u.prompt_tokens || 0;
+              if (input > 0) {
+                initialTokens = { prompt: input, completion: 0, total: input };
+              }
+            }
+          } catch (e) { /* skip */ }
+        }
+      }
+    }
+  }
+  
+  // Prefer message_delta (final) over message_start (initial) token counts
+  return finalTokens || initialTokens || null;
+}
+
 function matches(exchange) {
   const req = exchange.request;
   if (currentFilter === "error" && exchange.response?.statusCode < 400) return false;
   if (currentFilter === "llm") {
     const u = req.url.toLowerCase();
-    if (!u.includes("openai") && !u.includes("anthropic") && !u.includes("v1/chat") && !u.includes("v1/completions") && !u.includes("api.anthropic") && !u.includes("googleai") && !u.includes("gemini")) return false;
+    if (!u.includes("openai") && !u.includes("anthropic") && !u.includes("v1/chat") && !u.includes("v1/completions") && !u.includes("api.anthropic") && !u.includes("googleai") && !u.includes("gemini") && !u.includes("mistral") && !u.includes("cohere") && !u.includes("deepseek") && !u.includes("xai") && !u.includes("minimax")) return false;
   }
   if (currentFilter === "https" && !exchange.isHttps) return false;
   if (searchQuery) {
@@ -307,24 +366,50 @@ function renderDetail(id) {
   const res = ex.response;
   const isHttps = ex.isHttps;
 
-  // Detect LLM API calls
+  // Detect LLM API calls (include minimax, together, fireworks, groq, etc.)
   const urlLower = (req.url || "").toLowerCase();
-  const isLlmCall = urlLower.includes("openai") || urlLower.includes("anthropic") || urlLower.includes("v1/chat/") || urlLower.includes("v1/completions") || urlLower.includes("api.anthropic") || urlLower.includes("googleai") || urlLower.includes("gemini") || urlLower.includes("mistral") || urlLower.includes("cohere") || urlLower.includes("deepseek") || urlLower.includes("xai");
+  const isLlmCall = urlLower.includes("openai") || urlLower.includes("anthropic") || urlLower.includes("v1/chat/") || urlLower.includes("v1/completions") || urlLower.includes("api.anthropic") || urlLower.includes("googleai") || urlLower.includes("gemini") || urlLower.includes("mistral") || urlLower.includes("cohere") || urlLower.includes("deepseek") || urlLower.includes("xai") || urlLower.includes("minimax");
 
   // Extract token usage from response body if LLM call
   let tokens = null;
-  let cost = null;
-  const modelPrices = { "gpt-4": { in: 30, out: 60 }, "gpt-4o": { in: 2.5, out: 10 }, "gpt-4o-mini": { in: 0.15, out: 0.6 }, "claude-3": { in: 3, out: 15 }, "claude-3.5": { in: 3, out: 15 }, "claude-sonnet-4": { in: 3, out: 15 }, "deepseek-chat": { in: 0.27, out: 1.1 }, default: { in: 2, out: 8 } };
+  let tokenSource = ''; // '' = API usage, ' (est.)' = character-based fallback
   if (isLlmCall && res && res.body) {
-    try {
-      const parsed = typeof res.body === 'string' ? JSON.parse(res.body) : res.body;
-      if (parsed.usage) {
-        tokens = { prompt: parsed.usage.prompt_tokens || 0, completion: parsed.usage.completion_tokens || 0, total: (parsed.usage.prompt_tokens || 0) + (parsed.usage.completion_tokens || 0) };
-        const model = (parsed.model || req.body ? req.body.match(/"model"\s*:\s*"([^"]+)"/) : null)?.[1] || "default";
-        const prices = modelPrices[model] || modelPrices.default;
-        cost = { prompt: (tokens.prompt / 1000000 * prices.in).toFixed(4), completion: (tokens.completion / 1000000 * prices.out).toFixed(4), total: ((tokens.prompt * prices.in + tokens.completion * prices.out) / 1000000).toFixed(4) };
+    // Try SSE parsing first (for streaming LLM responses from minimax, etc.)
+    const sseTokens = extractSseTokenUsage(res.body);
+    if (sseTokens) {
+      tokens = sseTokens;
+    } else {
+      // Try regular JSON parsing (for non-streaming responses)
+      try {
+        const parsed = typeof res.body === 'string' ? JSON.parse(res.body) : res.body;
+        if (parsed.usage) {
+          // Official token counts from the API response
+          tokens = { prompt: parsed.usage.prompt_tokens || parsed.usage.input_tokens || 0, completion: parsed.usage.completion_tokens || parsed.usage.output_tokens || 0, total: (parsed.usage.prompt_tokens || parsed.usage.input_tokens || 0) + (parsed.usage.completion_tokens || parsed.usage.output_tokens || 0) };
+        }
+      } catch (e) {
+        // Not valid JSON — try partial JSON extraction from SSE data lines
+        try {
+          // Last resort: search for any JSON in the body that has "usage"
+          const usageMatch = res.body.match(/\{"input_tokens":(\d+),"output_tokens":(\d+)[^}]*\}/);
+          if (usageMatch) {
+            tokens = { prompt: parseInt(usageMatch[1]), completion: parseInt(usageMatch[2]), total: parseInt(usageMatch[1]) + parseInt(usageMatch[2]) };
+          }
+        } catch (e2) {}
       }
-    } catch (e) {}
+    }
+    // Fallback: character-based estimation (~4 chars per token) if API didn't provide usage
+    if (!tokens) {
+      const reqBodyStr = req.body || '';
+      const resBodyStr = res.body || '';
+      const promptChars = reqBodyStr.length;
+      const completionChars = resBodyStr.length;
+      tokens = {
+        prompt: Math.ceil(promptChars / 4),
+        completion: Math.ceil(completionChars / 4),
+        total: Math.ceil((promptChars + completionChars) / 4),
+      };
+      tokenSource = ' (est.)';
+    }
   }
 
   let body = "";
@@ -342,9 +427,8 @@ function renderDetail(id) {
   body += `<span>🕐 ${new Date(req.timestamp).toLocaleString()}</span>`;
   if (res) body += `<span>⏱ ${res.duration}ms</span>`;
   if (res) body += `<span>📦 ${res.bodySize || 0}B</span>`;
-  if (isLlmCall && tokens) body += `<span>📊 ${tokens.total} tokens</span>`;
+  if (isLlmCall && tokens) body += `<span>📊 ${tokens.total.toLocaleString()} tokens${tokenSource}</span>`;
   body += `</div>`;
-  if (isLlmCall && cost) body += `<div style="margin-top:10px;padding:10px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);border-radius:var(--radius-sm)"><span style="font-size:13px;font-weight:600;color:var(--success)">$${cost.total}</span><span style="font-size:11px;color:var(--fg-muted);margin-left:8px">(prompt: $${cost.prompt} · completion: $${cost.completion})</span></div>`;
   body += `</div>`;
 
   // Tabs
@@ -353,7 +437,7 @@ function renderDetail(id) {
   body += `<button class="detail-tab" onclick="showDetailTab('response',this)">Response</button>`;
   body += `<button class="detail-tab" onclick="showDetailTab('headers',this)">Headers</button>`;
   body += `<button class="detail-tab" onclick="showDetailTab('timing',this)">Timing</button>`;
-  body += `<button class="detail-tab" onclick="openReplayModal('${id}')">↻ Replay</button></div>`;
+  body += `<button class="detail-tab" onclick="openReplayModal('${id}')\">↻ Replay</button></div>`;
 
   // Request tab
   body += `<div class="tab-content" id="req-tab"><div class="code-block"><pre>${prettyPrint(req.body)}</pre></div></div>`;
@@ -365,9 +449,9 @@ function renderDetail(id) {
     body += `<div class="code-block"><pre>${prettyPrint(res.body)}</pre></div>`;
     if (isLlmCall && tokens) {
       body += `<div style="margin-top:12px"><div class="token-stats">`;
-      body += `<div class="token-stat prompt"><div class="stat-value">${tokens.prompt.toLocaleString()}</div><div class="stat-label">Prompt Tokens</div></div>`;
-      body += `<div class="token-stat completion"><div class="stat-value">${tokens.completion.toLocaleString()}</div><div class="stat-label">Completion Tokens</div></div>`;
-      body += `<div class="token-stat total"><div class="stat-value">${tokens.total.toLocaleString()}</div><div class="stat-label">Total Tokens</div></div>`;
+      body += `<div class="token-stat prompt"><div class="stat-value">${tokens.prompt.toLocaleString()}</div><div class="stat-label">Prompt${tokenSource}</div></div>`;
+      body += `<div class="token-stat completion"><div class="stat-value">${tokens.completion.toLocaleString()}</div><div class="stat-label">Completion${tokenSource}</div></div>`;
+      body += `<div class="token-stat total"><div class="stat-value">${tokens.total.toLocaleString()}</div><div class="stat-label">Total${tokenSource}</div></div>`;
       body += `</div></div>`;
     }
   } else {
@@ -402,8 +486,8 @@ function showDetailTab(tab, btn) {
 
 function formatHeaders(h) {
   let out = "";
-  for (const [k,v] of Object.entries(h)) out += `${k}: ${Array.isArray(v)?v.join(", "):v}
-`;
+  if (!h) return out;
+  for (const [k,v] of Object.entries(h)) out += `${k}: ${Array.isArray(v)?v.join(", "):v}\n`;
   return out;
 }
 
