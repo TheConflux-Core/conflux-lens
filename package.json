@@ -4,6 +4,7 @@
   "description": "Conflux Lens — LLM-aware HTTP proxy for inspecting and debugging AI agent API traffic",
   "main": "dist/index.js",
   "scripts": {
+    "postinstall": "cd packages/sdk && npm install",
     "prebuild": "npm run build:sdk",
     "build": "tsc",
     "postbuild": "node scripts/copy-dashboard.js",
