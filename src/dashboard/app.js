@@ -321,6 +321,7 @@ function matches(exchange) {
   }
   if (currentFilter === "https" && !exchange.isHttps) return false;
   if (currentFilter === "websocket" && (!res || res.statusCode !== 101)) return false;
+  if (currentFilter === "slow" && (!res || res.duration < 2000)) return false;
   if (searchQuery) {
     const s = JSON.stringify([req.method, req.url, req.body || ""]).toLowerCase();
     if (!s.includes(searchQuery)) return false;
@@ -603,8 +604,7 @@ window.executeReplay = (origId) => {
 
 function showBreakpointAction(data) {
   breakpointActionModal.style.display = "flex";
-  document.getElementById("bpActionType").textContent = data.type === "request" ? "Incoming Request" : "Response Ready";
-  document.getElementById("bpActionTypeTitle").textContent = data.type === "request" ? "Incoming Request" : "Response";
+  document.getElementById("bpActionType").textContent = data.type === "request" ? "Incoming Request" : "Response";
   
   // Use syntax highlighting for intercepted request/response
   document.getElementById("bpRequestDisplay").innerHTML = prettyPrint(JSON.stringify(data.request, null, 2));
